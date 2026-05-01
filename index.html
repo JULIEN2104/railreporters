@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RailReporters</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-icon">🚆</div>
+        <span>RailReporters</span>
+      </div>
+
+      <nav class="main-nav">
+        <a href="#home">Accueil</a>
+        <a href="#reports">Reports</a>
+        <a href="#create-report">Publier</a>
+      </nav>
+
+      <div class="search-box">
+        <input type="text" placeholder="Rechercher une gare, un train, un opérateur..." />
+        <span>🔍</span>
+      </div>
+
+      <button class="login-button">Se connecter</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="home">
+      <div class="hero-overlay">
+        <div class="hero-content">
+          <span class="hero-badge">La communauté des voyageurs ferroviaires</span>
+
+          <h1>Partagez vos expériences de voyage en train</h1>
+
+          <p>
+            Reports détaillés, photos, itinéraires, confort à bord, services,
+            gares et avis de voyageurs.
+          </p>
+
+          <div class="hero-actions">
+            <a href="#reports" class="primary-link">Voir les reports</a>
+            <a href="#create-report" class="secondary-link">Publier un report</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="intro-section">
+      <div class="intro-card">
+        <div class="intro-icon">📝</div>
+        <h3>Raconter</h3>
+        <p>Décrivez votre trajet étape par étape, de l’arrivée en gare jusqu’à la destination finale.</p>
+      </div>
+
+      <div class="intro-card">
+        <div class="intro-icon">📸</div>
+        <h3>Illustrer</h3>
+        <p>Ajoutez une photo d’accueil et des images pour chaque moment important du voyage.</p>
+      </div>
+
+      <div class="intro-card">
+        <div class="intro-icon">🌍</div>
+        <h3>Découvrir</h3>
+        <p>Comparez les trains, les gares, les opérateurs et les expériences des autres voyageurs.</p>
+      </div>
+    </section>
+
+    <section class="content-section" id="reports">
+      <div class="section-header">
+        <h2>Derniers reports</h2>
+        <p>Les expériences ferroviaires publiées par la communauté.</p>
+      </div>
+
+      <p id="empty-state" class="empty-state">Aucun report pour le moment. Publiez le premier report RailReporters.</p>
+      <div id="reports-list" class="reports-list"></div>
+    </section>
+
+    <section class="content-section" id="create-report">
+      <div class="section-header">
+        <h2>Publier un report</h2>
+        <p>Racontez votre expérience de voyage en détail.</p>
+      </div>
+
+      <form id="report-form" class="report-form">
+        <div class="form-block">
+          <h3>Informations générales</h3>
+
+          <label for="title">Titre du report</label>
+          <input id="title" type="text" placeholder="Ex : TGV Paris → Lyon en première classe" required />
+
+          <label for="cover-photo">Photo d’accueil du report</label>
+          <input id="cover-photo" type="file" accept="image/*" />
+
+          <div class="form-grid">
+            <div>
+              <label for="train">Train</label>
+              <input id="train" type="text" placeholder="Ex : TGV Inoui" required />
+            </div>
+
+            <div>
+              <label for="operator">Opérateur</label>
+              <input id="operator" type="text" placeholder="Ex : SNCF" required />
+            </div>
+
+            <div>
+              <label for="depart">Gare de départ</label>
+              <input id="depart" type="text" placeholder="Ex : Paris Gare de Lyon" required />
+            </div>
+
+            <div>
+              <label for="heure-depart">Heure de départ</label>
+              <input id="heure-depart" type="time" />
+            </div>
+
+            <div>
+              <label for="arrivee">Gare d’arrivée</label>
+              <input id="arrivee" type="text" placeholder="Ex : Lyon Part-Dieu" required />
+            </div>
+
+            <div>
+              <label for="heure-arrivee">Heure d’arrivée</label>
+              <input id="heure-arrivee" type="time" />
+            </div>
+
+            <div>
+              <label for="date">Date du voyage</label>
+              <input id="date" type="date" required />
+            </div>
+
+            <div>
+              <label for="classe">Classe</label>
+              <input id="classe" type="text" placeholder="Ex : 1ère classe, 2nde classe..." />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-block">
+          <h3>1. Arrivée en gare</h3>
+          <textarea id="station-arrival-text" rows="4" placeholder="Ambiance, accès, propreté, signalétique..."></textarea>
+          <input id="station-arrival-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>2. Expérience en gare</h3>
+          <textarea id="station-experience-text" rows="4" placeholder="Guichet, affichage, attente, commerces, salon..."></textarea>
+          <input id="station-experience-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>3. Embarquement</h3>
+          <textarea id="boarding-text" rows="4" placeholder="Accès au quai, contrôle, organisation, montée à bord..."></textarea>
+          <input id="boarding-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>4. À bord du train</h3>
+          <textarea id="onboard-text" rows="4" placeholder="Voiture, siège, confort, espace, propreté..."></textarea>
+          <input id="onboard-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>5. Services à bord</h3>
+          <textarea id="services-text" rows="4" placeholder="Bar, restauration, Wi-Fi, prises, toilettes, personnel..."></textarea>
+          <input id="services-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>6. Arrivée à destination</h3>
+          <textarea id="arrival-text" rows="4" placeholder="Ponctualité, descente du train, sortie de gare, impression finale..."></textarea>
+          <input id="arrival-photo" type="file" accept="image/*" />
+        </div>
+
+        <div class="form-block">
+          <h3>Conclusion et note globale</h3>
+
+          <label for="conclusion">Conclusion</label>
+          <textarea id="conclusion" rows="4" placeholder="Résumé final de votre expérience" required></textarea>
+
+          <label for="rating">Note globale</label>
+          <select id="rating" required>
+            <option value="">Choisir une note</option>
+            <option value="1">1 / 5</option>
+            <option value="2">2 / 5</option>
+            <option value="3">3 / 5</option>
+            <option value="4">4 / 5</option>
+            <option value="5">5 / 5</option>
+          </select>
+        </div>
+
+        <button type="submit" class="publish-button">Publier le report</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>RailReporters — Prototype communautaire ferroviaire.</p>
+  </footer>
+  <button id="back-to-top" class="back-to-top">↑</button>
+  <script src="script.js"></script>
+</body>
+</html>
