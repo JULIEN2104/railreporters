@@ -1,0 +1,18 @@
+RailReporters — Prototype stable en ligne V1
+
+Date : version mise en ligne et testée avec succès.
+Domaine principal : https://railreporters.com
+
+Fonctionnalités validées :
+- accueil avec image locale
+- recherche fonctionnelle
+- publication de reports
+- compression automatique des photos
+- formulaire masqué puis affiché au clic
+- cartes résumé
+- report complet avec photos et texte
+- commentaires
+- suppression avec confirmation
+- bouton retour en haut
+- compatibilité ordinateur et tablette testée
+- railreporters.fr redirige vers railreporters.com
