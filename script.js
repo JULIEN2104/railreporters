@@ -11,6 +11,118 @@ document.addEventListener("DOMContentLoaded", function () {
   let openedReportIndex = null;
   let searchQuery = "";
 
+  function installerStylePublication() {
+    if (document.getElementById("publication-ux-style")) return;
+
+    const style = document.createElement("style");
+    style.id = "publication-ux-style";
+    style.textContent = `
+      .publication-help {
+        background: linear-gradient(135deg, #fff7ed, #ffffff);
+        border: 1px solid #fed7aa;
+        border-radius: 18px;
+        padding: 16px 18px;
+        margin-bottom: 22px;
+        color: #334155;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      .publication-help strong {
+        display: block;
+        color: #111827;
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      .publication-help ul {
+        margin: 8px 0 0 18px;
+        padding: 0;
+        line-height: 1.55;
+      }
+
+      .publication-help li {
+        margin-bottom: 4px;
+      }
+
+      .cancel-report-button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 14px 18px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #334155;
+        font-size: 15px;
+        font-weight: 800;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+      }
+
+      .cancel-report-button:hover {
+        background: #f8fafc;
+      }
+
+      .publish-button:disabled {
+        opacity: 0.72;
+        cursor: not-allowed;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ameliorerFormulairePublication() {
+    if (!form) return;
+
+    installerStylePublication();
+
+    if (!document.getElementById("publication-help")) {
+      const help = document.createElement("div");
+      help.id = "publication-help";
+      help.className = "publication-help";
+      help.innerHTML = `
+        <strong>Conseil avant de publier</strong>
+        <ul>
+          <li>Les photos sont facultatives : vous pouvez publier un report simple.</li>
+          <li>Les sections du voyage sont optionnelles : remplissez seulement ce qui est utile.</li>
+          <li>Les champs obligatoires sont : titre, train, opérateur, départ, arrivée, date, conclusion et note.</li>
+        </ul>
+      `;
+
+      form.prepend(help);
+    }
+
+    if (!document.getElementById("cancel-report-button")) {
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.id = "cancel-report-button";
+      cancelButton.className = "cancel-report-button";
+      cancelButton.textContent = "Annuler / fermer le formulaire";
+
+      const publishButton = form.querySelector(".publish-button");
+
+      if (publishButton) {
+        publishButton.insertAdjacentElement("afterend", cancelButton);
+      } else {
+        form.appendChild(cancelButton);
+      }
+
+      cancelButton.addEventListener("click", function () {
+        form.reset();
+
+        if (createReportSection) {
+          createReportSection.classList.remove("visible");
+        }
+
+        const reportsSection = document.getElementById("reports");
+        if (reportsSection) {
+          reportsSection.scrollIntoView({ behavior: "smooth" });
+        }
+      });
+    }
+  }
+
+
   function afficherFormulairePublication() {
     if (createReportSection) {
       createReportSection.classList.add("visible");
@@ -33,6 +145,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
+
+  ameliorerFormulairePublication();
 
   function afficherEtoiles(note) {
     let etoiles = "";
@@ -529,8 +643,19 @@ document.addEventListener("DOMContentLoaded", function () {
       const conclusion = document.getElementById("conclusion").value.trim();
       const rating = document.getElementById("rating").value;
 
-      if (!title || !train || !operator || !depart || !arrivee || !date || !conclusion || !rating) {
-        alert("Merci de remplir les champs obligatoires.");
+      const champsManquants = [];
+
+      if (!title) champsManquants.push("Titre du report");
+      if (!train) champsManquants.push("Train");
+      if (!operator) champsManquants.push("Opérateur");
+      if (!depart) champsManquants.push("Gare de départ");
+      if (!arrivee) champsManquants.push("Gare d’arrivée");
+      if (!date) champsManquants.push("Date du voyage");
+      if (!conclusion) champsManquants.push("Conclusion");
+      if (!rating) champsManquants.push("Note globale");
+
+      if (champsManquants.length > 0) {
+        alert("Merci de remplir les champs obligatoires suivants :\n- " + champsManquants.join("\n- "));
         return;
       }
 
