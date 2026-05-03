@@ -1,18 +1,40 @@
-RailReporters — Prototype stable en ligne V1
+RailReporters — Version stable
 
-Date : version mise en ligne et testée avec succès.
-Domaine principal : https://railreporters.com
+Version actuelle : V1.1 — Design coloré stabilisé + publication améliorée
+
+Domaine principal :
+https://railreporters.com
+
+Redirection :
+https://railreporters.fr → https://railreporters.com
 
 Fonctionnalités validées :
 - accueil avec image locale
+- design plus coloré et moins terne
+- cartes de présentation Raconter / Illustrer / Découvrir corrigées
+- suppression de la ligne internationale FR / DE / IT / ES / UK / JP
 - recherche fonctionnelle
 - publication de reports
+- formulaire de publication masqué par défaut puis affiché au clic
+- aide à la publication ajoutée
+- bouton Annuler / fermer le formulaire
 - compression automatique des photos
-- formulaire masqué puis affiché au clic
-- cartes résumé
-- report complet avec photos et texte
+- cartes résumé des reports
+- report complet avec sections, photos et commentaires
+- photos affichées avant le texte
+- carte visuelle du trajet avec animation
+- horaires départ / arrivée
 - commentaires
 - suppression avec confirmation
 - bouton retour en haut
 - compatibilité ordinateur et tablette testée
+- railreporters.com fonctionnel
+- www.railreporters.com fonctionnel
 - railreporters.fr redirige vers railreporters.com
+
+Limite actuelle :
+Les reports sont encore sauvegardés dans le navigateur de chaque utilisateur via localStorage.
+Ils ne sont pas encore partagés entre tous les visiteurs.
+
+Prochaine grande étape :
+Préparer une vraie version communautaire avec comptes utilisateurs, base de données partagée, stockage serveur des photos et modération.
