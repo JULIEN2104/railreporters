@@ -1167,4 +1167,171 @@ body {
     opacity: 1;
     transform: translateY(-8px) scale(1.03);
     z-index: 2;
+}/* =====================================================
+   V1.2 — AMÉLIORATION LECTURE DU REPORT OUVERT
+   ===================================================== */
+
+.report-details {
+  background: linear-gradient(180deg, #ffffff 0%, #fff8fb 45%, #f7fbff 100%) !important;
+}
+
+.report-content {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 34px 28px !important;
+}
+
+/* Carte du trajet plus douce dans le report ouvert */
+.route-card {
+  border-radius: 26px !important;
+  border: 1px solid rgba(255, 90, 95, 0.18) !important;
+  background:
+    radial-gradient(circle at 14% 20%, rgba(255, 90, 95, 0.10), transparent 28%),
+    radial-gradient(circle at 86% 18%, rgba(37, 99, 235, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f2fbff 100%) !important;
+}
+
+/* Étapes du report plus lisibles */
+.report-section {
+  position: relative;
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-radius: 26px !important;
+  padding: 28px !important;
+  margin-top: 30px !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08) !important;
+}
+
+.report-section h4 {
+  color: #111827 !important;
+  font-size: 24px !important;
+  margin-bottom: 18px !important;
+  letter-spacing: -0.4px;
+}
+
+.report-section h4::before {
+  content: "● ";
+  color: #ff5a5f !important;
+}
+
+/* Photos dans le report */
+.section-photo {
+  max-width: min(760px, 100%) !important;
+  max-height: 440px !important;
+  margin: 12px auto 24px !important;
+  display: block !important;
+  border-radius: 22px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12) !important;
+}
+
+/* Texte sous les photos : style carnet de voyage */
+.report-section p {
+  max-width: 760px !important;
+  margin: 18px auto 0 !important;
+  padding: 18px 20px !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fff7fa 100%) !important;
+  border: 1px solid rgba(255, 90, 95, 0.16) !important;
+  border-radius: 18px !important;
+  color: #334155 !important;
+  font-size: 16px !important;
+  line-height: 1.75 !important;
+}
+
+/* Conclusion plus premium */
+.report-section:has(.rating) {
+  background:
+    radial-gradient(circle at 88% 18%, rgba(255, 90, 95, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbff 100%) !important;
+  border: 1px solid rgba(37, 99, 235, 0.18) !important;
+}
+
+.report-section:has(.rating) h4::before {
+  content: "★ ";
+  color: #f59e0b !important;
+}
+
+.report-section:has(.rating) .rating {
+  display: inline-block;
+  margin-top: 20px !important;
+  padding: 11px 18px !important;
+  background: #111827 !important;
+  color: #ffffff !important;
+  border-radius: 999px !important;
+  border: none !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* Commentaires plus propres */
+.interaction-section {
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-radius: 26px !important;
+  padding: 26px !important;
+  margin-top: 32px !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08) !important;
+}
+
+.interaction-section h4 {
+  color: #111827 !important;
+  font-size: 24px !important;
+  margin-bottom: 16px !important;
+}
+
+.comment-form textarea {
+  background: #fff7fa !important;
+  border: 1px solid rgba(255, 90, 95, 0.18) !important;
+  border-radius: 18px !important;
+}
+
+.comment-form button {
+  background: linear-gradient(135deg, #ff5a5f, #2563eb) !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+}
+
+.comment {
+  background: #f8fafc !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 18px !important;
+}
+
+/* Boutons de bas de report */
+.report-bottom-actions {
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-radius: 26px !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08) !important;
+}
+
+.close-report-bottom-button {
+  background: linear-gradient(135deg, #ff5a5f, #2563eb) !important;
+}
+
+@media (max-width: 700px) {
+  .report-content {
+    padding: 20px 16px !important;
+  }
+
+  .report-section,
+  .interaction-section,
+  .report-bottom-actions {
+    padding: 20px !important;
+    border-radius: 22px !important;
+  }
+
+  .report-section h4,
+  .interaction-section h4 {
+    font-size: 21px !important;
+  }
+
+  .section-photo {
+    max-height: 340px !important;
+  }
+
+  .report-section p {
+    max-width: 100% !important;
+    padding: 15px 16px !important;
+  }
 }
