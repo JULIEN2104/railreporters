@@ -1112,4 +1112,59 @@ body {
   .section-photo {
     max-height: 300px;
   }
+}.report-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.report-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+}.report-card img {
+    transition: transform 0.4s ease;
+}
+
+.report-card:hover img {
+    transform: scale(1.05);
+}.report-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.report-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        120deg,
+        transparent,
+        rgba(255,255,255,0.2),
+        transparent
+    );
+    transition: 0.5s;
+}
+
+.report-card:hover::before {
+    left: 100%;
+}.intro-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.intro-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}.intro-card:hover {
+    transform: translateY(-6px) scale(1.02);
+}/* Effet focus sur les cartes reports */
+.reports-container:hover .report-card {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.reports-container .report-card:hover {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.03);
+    z-index: 2;
 }
