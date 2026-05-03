@@ -1,6 +1,6 @@
 RailReporters — Version stable
 
-Version actuelle : V1.1 — Design coloré stabilisé + publication améliorée
+Version actuelle : V1.2 — Lecture des reports améliorée
 
 Domaine principal :
 https://railreporters.com
@@ -12,7 +12,6 @@ Fonctionnalités validées :
 - accueil avec image locale
 - design plus coloré et moins terne
 - cartes de présentation Raconter / Illustrer / Découvrir corrigées
-- suppression de la ligne internationale FR / DE / IT / ES / UK / JP
 - recherche fonctionnelle
 - publication de reports
 - formulaire de publication masqué par défaut puis affiché au clic
@@ -24,7 +23,9 @@ Fonctionnalités validées :
 - photos affichées avant le texte
 - carte visuelle du trajet avec animation
 - horaires départ / arrivée
-- commentaires
+- lecture du report ouvert améliorée
+- conclusion mieux mise en valeur
+- zone commentaires améliorée
 - suppression avec confirmation
 - bouton retour en haut
 - compatibilité ordinateur et tablette testée
