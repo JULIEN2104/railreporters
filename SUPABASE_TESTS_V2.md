@@ -17,6 +17,10 @@ Projet Supabase retrouvé :
 - région : West EU / Ireland
 - Table Editor : accessible
 - SQL Editor : accessible
+- Authentication : accessible
+- Storage : accessible
+
+Statut : validé.
 
 ---
 
@@ -136,7 +140,7 @@ Statut : validé.
 
 Une photo de test a été créée dans `report_photos`.
 
-Données utilisées :
+Données initiales utilisées :
 
 - report_id : id du report de test
 - section_id : id de la section de test
@@ -145,7 +149,7 @@ Données utilisées :
 - caption : Photo de test Supabase
 - position : 1
 
-Il ne s’agit pas encore d’un vrai upload Supabase Storage.
+Ensuite, l’URL fictive a été remplacée par une vraie URL publique Supabase Storage.
 
 Statut : validé.
 
@@ -164,44 +168,89 @@ Relations testées avec succès :
 - report_sections.id → report_photos.section_id
 - profiles.id → report_photos.user_id
 
+Statut : validé.
+
 ---
 
-## 10. Ce qui n’est pas encore fait
+## 10. Supabase Storage
+
+Un bucket Storage a été créé :
+
+- bucket : report-photos
+- type : public
+
+Une image de test a été uploadée manuellement dans ce bucket.
+
+L’URL publique de l’image a été récupérée, testée dans un navigateur, puis ajoutée dans la table `report_photos`.
+
+Résultat :
+
+- bucket créé
+- image uploadée
+- URL publique fonctionnelle
+- URL enregistrée dans `report_photos`
+
+Statut : validé.
+
+---
+
+## 11. Ce que le test Storage confirme
+
+Le test Storage valide la logique future suivante :
+
+1. l’utilisateur choisit une photo ;
+2. le site compresse la photo ;
+3. le site envoie la photo dans Supabase Storage ;
+4. Supabase fournit une URL publique ou une URL utilisable ;
+5. le site enregistre cette URL dans `report_photos` ;
+6. le report affiche la photo depuis cette URL.
+
+Pour l’instant, ce processus a été testé manuellement.
+
+Le site public `railreporters.com` n’est pas encore connecté à Supabase Storage.
+
+---
+
+## 12. Ce qui n’est pas encore fait
 
 Non encore réalisé :
 
 - connexion du site railreporters.com à Supabase
 - inscription / connexion depuis le site
 - vraie publication en base depuis le formulaire
-- upload réel des photos dans Supabase Storage
+- upload réel des photos depuis le formulaire public
+- récupération automatique des URLs Storage depuis le site
 - commentaires partagés depuis le site
 - interface admin
 - modération réelle
-- buckets Storage
-- policies Storage
+- policies Storage détaillées
+- suppression photo depuis le site
+- migration complète de localStorage vers Supabase
 
 ---
 
-## 11. Prochaine étape recommandée
+## 13. Prochaine étape recommandée
 
 Prochaine étape technique :
 
-Créer et tester Supabase Storage avec prudence.
+Préparer les règles Storage et la logique d’upload contrôlé.
 
-Objectif :
+Objectifs :
 
-- créer un bucket `report-photos`
-- comprendre les règles d’accès
-- tester un upload manuel
-- ne pas encore brancher le site dessus
+- contrôler qui peut uploader ;
+- contrôler qui peut supprimer ;
+- limiter l’upload aux utilisateurs connectés ;
+- lier une photo à un report appartenant à l’utilisateur ;
+- conserver le bucket `report-photos` comme bucket public au départ ;
+- ne pas encore brancher le site sans test local.
 
 Alternative prudente :
 
-Avant Storage, relire les policies RLS et vérifier que les tables sont correctement sécurisées.
+Avant de brancher le site, créer un document `STORAGE_POLICIES_V2.md` pour préparer les règles d’accès.
 
 ---
 
-## 12. Rappel important
+## 14. Rappel important
 
 La V1.2 reste la version stable en ligne.
 
