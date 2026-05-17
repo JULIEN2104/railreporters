@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Ce document garde une trace du premier test de connexion Supabase réalisé depuis une page HTML locale.
+Ce document garde une trace des premiers tests de connexion Supabase réalisés depuis une page HTML locale.
 
 La V1.2 du site public reste stable et indépendante de Supabase.
 
@@ -22,9 +22,9 @@ Vérifier qu’une page locale peut :
 
 ---
 
-## 2. Fichier utilisé
+## 2. Premier fichier utilisé
 
-Un fichier local de test a été utilisé :
+Un premier fichier local de test a été utilisé :
 
 ```text
 auth_test_supabase_sans_code.html
