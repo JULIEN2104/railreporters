@@ -44,7 +44,27 @@ Statut : validé.
 
 ---
 
-## 3. Ce que cela valide
+## 3. Protection de la publication
+
+Une protection locale a été ajoutée sur le bouton Publier un report.
+
+Comportement validé :
+
+- utilisateur non connecté : le formulaire ne s’ouvre pas directement ;
+- utilisateur non connecté : la fenêtre de connexion s’ouvre ;
+- utilisateur connecté : le formulaire de publication s’ouvre normalement.
+
+Cela prépare la future logique V2 :
+
+- seuls les membres connectés pourront publier ;
+- les visiteurs pourront lire les reports ;
+- les reports resteront plus tard liés à un profil utilisateur.
+
+Statut : validé.
+
+---
+
+## 4. Ce que cela valide
 
 L’intégration locale confirme que RailReporters peut :
 
@@ -53,11 +73,12 @@ L’intégration locale confirme que RailReporters peut :
 - récupérer son profil depuis profiles ;
 - distinguer un membre d’un admin ;
 - afficher un état connecté / non connecté ;
+- protéger l’accès à la publication ;
 - conserver le fonctionnement actuel du formulaire de publication local.
 
 ---
 
-## 4. Ce qui n’est pas encore fait
+## 5. Ce qui n’est pas encore fait
 
 Non encore réalisé :
 
@@ -73,7 +94,7 @@ Non encore réalisé :
 
 ---
 
-## 5. Sécurité
+## 6. Sécurité
 
 Aucune clé secrète ne doit être utilisée dans le site.
 
@@ -89,9 +110,11 @@ Seule la clé publishable peut être utilisée côté navigateur si les règles 
 
 ---
 
-## 6. Décision actuelle
+## 7. Décision actuelle
 
 L’authentification Supabase est validée en local.
+
+La protection locale de la publication est validée.
 
 La version publique V1.2 reste stable.
 
