@@ -1,4 +1,13 @@
 document.addEventListener("DOMContentLoaded", function () {
+  /* =====================================================
+     RAILREPORTERS — V2 BETA LOCALE SUPABASE
+     Version locale propre : Auth + reports Supabase + vrai formulaire.
+     Ne pas publier sans test complet.
+     ===================================================== */
+
+  const SUPABASE_URL = "https://mtusriymwtqkkmhdknbc.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_7C49ss0gnxllKnsgNxQ8tg_6C3Iu1Bu";
+
   const form = document.getElementById("report-form");
   const reportsList = document.getElementById("reports-list");
   const emptyState = document.getElementById("empty-state");
@@ -6,151 +15,39 @@ document.addEventListener("DOMContentLoaded", function () {
   const createReportSection = document.getElementById("create-report");
   const publishLinks = document.querySelectorAll('a[href="#create-report"]');
   const backToTopButton = document.getElementById("back-to-top");
+  const topbarInner = document.querySelector(".topbar-inner");
 
-  let reports = JSON.parse(localStorage.getItem("railreporters-full-reports")) || [];
-  let openedReportIndex = null;
+  let supabaseClient = null;
+  let currentUser = null;
+  let currentProfile = null;
+  let reports = [];
+  let openedReportId = null;
   let searchQuery = "";
 
-  function installerStylePublication() {
-    if (document.getElementById("publication-ux-style")) return;
-
-    const style = document.createElement("style");
-    style.id = "publication-ux-style";
-    style.textContent = `
-      .publication-help {
-        background: linear-gradient(135deg, #fff7ed, #ffffff);
-        border: 1px solid #fed7aa;
-        border-radius: 18px;
-        padding: 16px 18px;
-        margin-bottom: 22px;
-        color: #334155;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-      }
-
-      .publication-help strong {
-        display: block;
-        color: #111827;
-        margin-bottom: 8px;
-        font-size: 16px;
-      }
-
-      .publication-help ul {
-        margin: 8px 0 0 18px;
-        padding: 0;
-        line-height: 1.55;
-      }
-
-      .publication-help li {
-        margin-bottom: 4px;
-      }
-
-      .cancel-report-button {
-        width: 100%;
-        margin-top: 12px;
-        padding: 14px 18px;
-        border: 1px solid #cbd5e1;
-        border-radius: 999px;
-        background: #ffffff;
-        color: #334155;
-        font-size: 15px;
-        font-weight: 800;
-        cursor: pointer;
-        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
-      }
-
-      .cancel-report-button:hover {
-        background: #f8fafc;
-      }
-
-      .publish-button:disabled {
-        opacity: 0.72;
-        cursor: not-allowed;
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function ameliorerFormulairePublication() {
-    if (!form) return;
-
-    installerStylePublication();
-
-    if (!document.getElementById("publication-help")) {
-      const help = document.createElement("div");
-      help.id = "publication-help";
-      help.className = "publication-help";
-      help.innerHTML = `
-        <strong>Conseil avant de publier</strong>
-        <ul>
-          <li>Les photos sont facultatives : vous pouvez publier un report simple.</li>
-          <li>Les sections du voyage sont optionnelles : remplissez seulement ce qui est utile.</li>
-          <li>Les champs obligatoires sont : titre, train, opérateur, départ, arrivée, date, conclusion et note.</li>
-        </ul>
-      `;
-
-      form.prepend(help);
+  if (!window.supabase) {
+    console.error("Supabase n'est pas chargé.");
+    if (emptyState) {
+      emptyState.style.display = "block";
+      emptyState.textContent = "Erreur : Supabase n'est pas chargé. Vérifiez la connexion Internet.";
     }
-
-    if (!document.getElementById("cancel-report-button")) {
-      const cancelButton = document.createElement("button");
-      cancelButton.type = "button";
-      cancelButton.id = "cancel-report-button";
-      cancelButton.className = "cancel-report-button";
-      cancelButton.textContent = "Annuler / fermer le formulaire";
-
-      const publishButton = form.querySelector(".publish-button");
-
-      if (publishButton) {
-        publishButton.insertAdjacentElement("afterend", cancelButton);
-      } else {
-        form.appendChild(cancelButton);
-      }
-
-      cancelButton.addEventListener("click", function () {
-        form.reset();
-
-        if (createReportSection) {
-          createReportSection.classList.remove("visible");
-        }
-
-        const reportsSection = document.getElementById("reports");
-        if (reportsSection) {
-          reportsSection.scrollIntoView({ behavior: "smooth" });
-        }
-      });
-    }
+    return;
   }
 
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  function afficherFormulairePublication() {
-    if (createReportSection) {
-      createReportSection.classList.add("visible");
-      createReportSection.scrollIntoView({ behavior: "smooth" });
-    }
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   }
-
-  publishLinks.forEach(function (link) {
-    link.addEventListener("click", function (event) {
-      event.preventDefault();
-      afficherFormulairePublication();
-    });
-  });
-
-  if (backToTopButton) {
-    backToTopButton.addEventListener("click", function () {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-      });
-    });
-  }
-
-  ameliorerFormulairePublication();
 
   function afficherEtoiles(note) {
     let etoiles = "";
-    for (let i = 0; i < Number(note); i++) {
+    for (let i = 0; i < Number(note || 0); i++) {
       etoiles += "⭐";
     }
     return etoiles;
@@ -158,122 +55,931 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function formaterDate(dateString) {
     if (!dateString) return "";
-    const morceaux = dateString.split("-");
+    const morceaux = String(dateString).split("-");
     if (morceaux.length !== 3) return dateString;
     return `${morceaux[2]}/${morceaux[1]}/${morceaux[0]}`;
   }
 
-  function sauvegarderReports() {
+  function getRoleLabel(role) {
+    if (role === "admin") return "Admin RailReporters";
+    if (role === "moderator") return "Modérateur";
+    return "Membre";
+  }
+
+  function getAuthorLabel(profile) {
+    if (!profile) return "Auteur inconnu";
+    const name = profile.username || "Utilisateur";
+    const role = profile.role ? getRoleLabel(profile.role) : "Membre";
+    return `${name} · ${role}`;
+  }
+
+  function cleanSegment(value) {
+    return String(value || "railreporters")
+      .trim()
+      .replace(/[^a-zA-Z0-9-_]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "railreporters";
+  }
+
+  function cleanFileBase(value) {
+    const name = String(value || "photo").toLowerCase();
+    const withoutExt = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
+    return cleanSegment(withoutExt) || "photo";
+  }
+
+  function getInputValue(id) {
+    const element = document.getElementById(id);
+    return element ? element.value.trim() : "";
+  }
+
+  function getInputFile(id) {
+    const element = document.getElementById(id);
+    if (!element || !element.files || element.files.length === 0) return null;
+    return element.files[0];
+  }
+
+  function setPublicationStatus(text, type = "") {
+    let status = document.getElementById("real-form-supabase-status");
+    if (!status || !form) return;
+
+    status.textContent = text;
+    status.className = "real-form-supabase-status";
+    if (type === "ok") status.classList.add("ok");
+    if (type === "error") status.classList.add("error");
+  }
+
+  function installerStylesV2() {
+    if (document.getElementById("railreporters-v2-beta-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "railreporters-v2-beta-styles";
+    style.textContent = `
+      .login-button.auth-visible {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 999px;
+        padding: 11px 16px;
+        font-weight: 900;
+        color: #ffffff;
+        background: linear-gradient(135deg, #ff5a5f, #2563eb);
+        cursor: pointer;
+        box-shadow: 0 12px 24px rgba(255, 90, 95, 0.22);
+        white-space: nowrap;
+      }
+
+      .auth-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(226, 232, 240, 0.95);
+        color: #111827;
+        font-size: 14px;
+        font-weight: 800;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+        white-space: nowrap;
+      }
+
+      .auth-status-badge.admin {
+        background: linear-gradient(135deg, #fff7ed, #ffffff);
+        border-color: rgba(255, 90, 95, 0.26);
+        color: #9f1239;
+      }
+
+      .auth-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(15, 23, 42, 0.52);
+        backdrop-filter: blur(6px);
+      }
+
+      .auth-modal-backdrop.visible {
+        display: flex;
+      }
+
+      .auth-modal {
+        width: min(520px, 100%);
+        background: #ffffff;
+        border-radius: 26px;
+        padding: 24px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+      }
+
+      .auth-modal h2 {
+        margin: 0 0 8px;
+        color: #111827;
+        font-size: 28px;
+        letter-spacing: -0.6px;
+      }
+
+      .auth-modal p {
+        margin: 0 0 18px;
+        color: #64748b;
+        line-height: 1.55;
+      }
+
+      .auth-modal label {
+        display: block;
+        margin: 14px 0 6px;
+        font-weight: 900;
+        color: #111827;
+        font-size: 14px;
+      }
+
+      .auth-modal input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 13px 14px;
+        border-radius: 14px;
+        border: 1px solid #cbd5e1;
+        font-size: 15px;
+        background: #ffffff;
+      }
+
+      .auth-modal input:focus {
+        outline: none;
+        border-color: #ff5a5f;
+        box-shadow: 0 0 0 4px rgba(255, 90, 95, 0.13);
+      }
+
+      .auth-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .auth-actions button {
+        padding: 12px 16px;
+        border: none;
+        border-radius: 999px;
+        cursor: pointer;
+        font-weight: 900;
+      }
+
+      .auth-actions button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .auth-primary {
+        color: white;
+        background: linear-gradient(135deg, #ff5a5f, #2563eb);
+        box-shadow: 0 14px 28px rgba(255, 90, 95, 0.22);
+      }
+
+      .auth-secondary {
+        color: white;
+        background: #111827;
+      }
+
+      .auth-light {
+        color: #111827;
+        background: #f1f5f9;
+      }
+
+      .auth-message {
+        margin-top: 16px;
+        padding: 13px 14px;
+        border-radius: 14px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #334155;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+
+      .auth-message.ok {
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        color: #166534;
+      }
+
+      .auth-message.error {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+      }
+
+      .real-form-supabase-status {
+        margin: 18px 0 0;
+        padding: 15px 16px;
+        border-radius: 16px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #334155;
+        white-space: pre-wrap;
+        line-height: 1.55;
+      }
+
+      .real-form-supabase-status.ok {
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        color: #166534;
+      }
+
+      .real-form-supabase-status.error {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+      }
+
+      .author-line {
+        margin: 0 0 10px;
+        color: inherit;
+        opacity: 0.92;
+        font-weight: 800;
+      }
+
+      .summary-info .author-line {
+        color: #e5e7eb !important;
+      }
+
+      .comment-author {
+        display: block;
+        margin-bottom: 8px;
+        color: #111827;
+        font-weight: 900;
+      }
+
+      @media (max-width: 900px) {
+        .auth-status-badge {
+          justify-self: start;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function getTopbarContainer() {
+    return topbarInner || document.querySelector(".topbar") || document.querySelector("header") || document.body;
+  }
+
+  function createLoginButtonIfNeeded() {
+    let loginButton = document.querySelector(".login-button");
+    if (!loginButton) {
+      loginButton = document.createElement("button");
+      loginButton.className = "login-button auth-visible";
+      loginButton.type = "button";
+      loginButton.textContent = "Se connecter";
+      getTopbarContainer().appendChild(loginButton);
+    } else {
+      loginButton.classList.add("auth-visible");
+      loginButton.type = "button";
+      loginButton.textContent = "Se connecter";
+    }
+    return loginButton;
+  }
+
+  function createAuthUI() {
+    const loginButton = createLoginButtonIfNeeded();
+
+    if (!document.getElementById("auth-status-badge")) {
+      const badge = document.createElement("div");
+      badge.id = "auth-status-badge";
+      badge.className = "auth-status-badge";
+      badge.textContent = "Non connecté";
+      getTopbarContainer().appendChild(badge);
+    }
+
+    if (!document.getElementById("auth-modal-backdrop")) {
+      const modal = document.createElement("div");
+      modal.id = "auth-modal-backdrop";
+      modal.className = "auth-modal-backdrop";
+      modal.innerHTML = `
+        <div class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+          <h2 id="auth-title">Connexion RailReporters</h2>
+          <p>
+            Connectez-vous pour publier un report, ajouter des commentaires et préparer la future version communautaire.
+          </p>
+
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" placeholder="Votre email" autocomplete="email" />
+
+          <label for="auth-password">Mot de passe</label>
+          <input id="auth-password" type="password" placeholder="Mot de passe" autocomplete="current-password" />
+
+          <div class="auth-actions">
+            <button id="auth-login" class="auth-primary" type="button">Se connecter</button>
+            <button id="auth-signup" class="auth-light" type="button">Créer un compte</button>
+            <button id="auth-logout" class="auth-secondary" type="button">Se déconnecter</button>
+            <button id="auth-close" class="auth-light" type="button">Fermer</button>
+          </div>
+
+          <div id="auth-message" class="auth-message">En attente de connexion...</div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    loginButton.addEventListener("click", openAuthModal);
+  }
+
+  function getAuthElements() {
+    return {
+      badge: document.getElementById("auth-status-badge"),
+      modal: document.getElementById("auth-modal-backdrop"),
+      email: document.getElementById("auth-email"),
+      password: document.getElementById("auth-password"),
+      login: document.getElementById("auth-login"),
+      signup: document.getElementById("auth-signup"),
+      logout: document.getElementById("auth-logout"),
+      close: document.getElementById("auth-close"),
+      message: document.getElementById("auth-message")
+    };
+  }
+
+  function setAuthMessage(text, type = "") {
+    const { message } = getAuthElements();
+    if (!message) return;
+    message.textContent = text;
+    message.className = "auth-message";
+    if (type === "ok") message.classList.add("ok");
+    if (type === "error") message.classList.add("error");
+  }
+
+  function openAuthModal() {
+    const { modal } = getAuthElements();
+    if (modal) modal.classList.add("visible");
+  }
+
+  function closeAuthModal() {
+    const { modal } = getAuthElements();
+    if (modal) modal.classList.remove("visible");
+  }
+
+  function updateAuthDisplay() {
+    const loginButton = document.querySelector(".login-button");
+    const { badge } = getAuthElements();
+    if (!loginButton || !badge) return;
+
+    if (!currentUser) {
+      badge.className = "auth-status-badge";
+      badge.textContent = "Non connecté";
+      loginButton.textContent = "Se connecter";
+      return;
+    }
+
+    const label = currentProfile?.username || currentUser.email || "Utilisateur";
+    const role = currentProfile?.role ? ` · ${currentProfile.role}` : "";
+    badge.textContent = `Connecté : ${label}${role}`;
+    badge.className = "auth-status-badge";
+    if (currentProfile?.role === "admin") badge.classList.add("admin");
+    loginButton.textContent = "Mon compte";
+  }
+
+  async function loadProfile(user) {
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .select("username, role, is_banned, avatar_url")
+      .eq("id", user.id)
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function refreshSession() {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error || !data.session) {
+      currentUser = null;
+      currentProfile = null;
+      updateAuthDisplay();
+      return;
+    }
+    currentUser = data.session.user;
+    currentProfile = await loadProfile(currentUser);
+    updateAuthDisplay();
+  }
+
+  async function handleLogin() {
+    const { email, password, login } = getAuthElements();
+    const userEmail = email.value.trim();
+    const userPassword = password.value;
+
+    if (!userEmail || !userPassword) {
+      setAuthMessage("Merci de saisir un email et un mot de passe.", "error");
+      return;
+    }
+
+    login.disabled = true;
+    setAuthMessage("Connexion en cours...");
+
     try {
-      localStorage.setItem("railreporters-full-reports", JSON.stringify(reports));
-      return true;
-    } catch (error) {
-      console.error("Erreur de sauvegarde :", error);
-      alert(
-        "La sauvegarde a échoué. Les photos sont peut-être encore trop lourdes pour ce navigateur. Essaie avec moins de photos ou des images plus légères."
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: userEmail,
+        password: userPassword
+      });
+
+      if (error) {
+        setAuthMessage("Erreur de connexion :\n" + error.message, "error");
+        return;
+      }
+
+      currentUser = data.user;
+      currentProfile = await loadProfile(currentUser);
+      updateAuthDisplay();
+      setAuthMessage(
+        "Connexion réussie ✅\n\n" +
+        "Email : " + currentUser.email + "\n" +
+        "Username : " + currentProfile.username + "\n" +
+        "Rôle : " + currentProfile.role + "\n" +
+        "Banni : " + currentProfile.is_banned,
+        "ok"
       );
-      return false;
+      chargerReportsSupabase();
+    } catch (error) {
+      setAuthMessage("Erreur technique :\n" + error.message, "error");
+    } finally {
+      login.disabled = false;
     }
   }
 
-  function compresserImage(file, maxWidth = 1400, maxHeight = 1400, quality = 0.78) {
-    return new Promise(function (resolve) {
-      const reader = new FileReader();
+  async function handleSignup() {
+    const { email, password, signup } = getAuthElements();
+    const userEmail = email.value.trim();
+    const userPassword = password.value;
 
+    if (!userEmail || !userPassword) {
+      setAuthMessage("Merci de saisir un email et un mot de passe pour créer un compte.", "error");
+      return;
+    }
+
+    signup.disabled = true;
+    setAuthMessage("Création du compte en cours...");
+
+    try {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: userEmail,
+        password: userPassword,
+        options: {
+          data: {
+            username: userEmail.split("@")[0]
+          }
+        }
+      });
+
+      if (error) {
+        setAuthMessage("Erreur création compte :\n" + error.message, "error");
+        return;
+      }
+
+      if (data.session && data.user) {
+        currentUser = data.user;
+        currentProfile = await loadProfile(currentUser);
+        updateAuthDisplay();
+        setAuthMessage("Compte créé et connecté ✅", "ok");
+        chargerReportsSupabase();
+      } else {
+        setAuthMessage("Compte créé. Vérifiez votre email si une confirmation est demandée.", "ok");
+      }
+    } catch (error) {
+      setAuthMessage("Erreur technique :\n" + error.message, "error");
+    } finally {
+      signup.disabled = false;
+    }
+  }
+
+  async function handleLogout() {
+    await supabaseClient.auth.signOut();
+    currentUser = null;
+    currentProfile = null;
+    updateAuthDisplay();
+    setAuthMessage("Déconnexion effectuée.", "ok");
+  }
+
+  function initializeAuth() {
+    const { modal, login, signup, logout, close } = getAuthElements();
+    login.addEventListener("click", handleLogin);
+    signup.addEventListener("click", handleSignup);
+    logout.addEventListener("click", handleLogout);
+    close.addEventListener("click", closeAuthModal);
+    modal.addEventListener("click", function (event) {
+      if (event.target === modal) closeAuthModal();
+    });
+    supabaseClient.auth.onAuthStateChange(function (_event, session) {
+      if (!session) {
+        currentUser = null;
+        currentProfile = null;
+        updateAuthDisplay();
+      }
+    });
+  }
+
+  function showPublicationForm() {
+    if (createReportSection) {
+      createReportSection.classList.add("visible");
+      createReportSection.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+
+  function protectPublishLinks() {
+    publishLinks.forEach(function (link) {
+      link.addEventListener("click", function (event) {
+        event.preventDefault();
+        if (!currentUser) {
+          openAuthModal();
+          setAuthMessage("Connectez-vous pour publier un report.", "error");
+          return;
+        }
+        showPublicationForm();
+      });
+    });
+  }
+
+  function getSectionDefinitions() {
+    return [
+      { section_type: "station_arrival", title: "Arrivée en gare", contentId: "station-arrival-text", photoInputId: "station-arrival-photo", position: 1 },
+      { section_type: "station_experience", title: "Expérience en gare", contentId: "station-experience-text", photoInputId: "station-experience-photo", position: 2 },
+      { section_type: "boarding", title: "Embarquement", contentId: "boarding-text", photoInputId: "boarding-photo", position: 3 },
+      { section_type: "onboard", title: "À bord du train", contentId: "onboard-text", photoInputId: "onboard-photo", position: 4 },
+      { section_type: "services", title: "Services à bord", contentId: "services-text", photoInputId: "services-photo", position: 5 },
+      { section_type: "arrival", title: "Arrivée à destination", contentId: "arrival-text", photoInputId: "arrival-photo", position: 6 }
+    ];
+  }
+
+  function compressImageToBlob(file, maxWidth = 1600, maxHeight = 1600, quality = 0.82) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
       reader.onload = function (event) {
         const image = new Image();
-
         image.onload = function () {
           let width = image.width;
           let height = image.height;
-
           if (width > maxWidth || height > maxHeight) {
             const ratio = Math.min(maxWidth / width, maxHeight / height);
             width = Math.round(width * ratio);
             height = Math.round(height * ratio);
           }
-
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
-
           const context = canvas.getContext("2d");
           context.drawImage(image, 0, 0, width, height);
-
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-          resolve(compressedDataUrl);
+          canvas.toBlob(function (blob) {
+            if (!blob) {
+              reject(new Error("Compression image impossible."));
+              return;
+            }
+            resolve(blob);
+          }, "image/jpeg", quality);
         };
-
         image.onerror = function () {
-          resolve("");
+          reject(new Error("Image illisible."));
         };
-
         image.src = event.target.result;
       };
-
       reader.onerror = function () {
-        resolve("");
+        reject(new Error("Lecture image impossible."));
       };
-
       reader.readAsDataURL(file);
     });
   }
 
-  function lireImage(inputId) {
-    return new Promise(function (resolve) {
-      const input = document.getElementById(inputId);
-      const file = input.files[0];
-
-      if (!file) {
-        resolve("");
-        return;
-      }
-
-      if (!file.type.startsWith("image/")) {
-        alert("Le fichier sélectionné n'est pas une image.");
-        resolve("");
-        return;
-      }
-
-      compresserImage(file).then(function (imageCompressee) {
-        resolve(imageCompressee);
+  async function uploadPhotoSupabase({ file, userId, reportId, sectionType, originalName }) {
+    const blob = await compressImageToBlob(file);
+    const fileName = `${cleanSegment(sectionType)}-${Date.now()}-${cleanFileBase(originalName)}.jpg`;
+    const path = `${userId}/${reportId}/${fileName}`;
+    const { data, error } = await supabaseClient.storage
+      .from("report-photos")
+      .upload(path, blob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: "image/jpeg"
       });
-    });
+    if (error) throw error;
+    const { data: publicData } = supabaseClient.storage
+      .from("report-photos")
+      .getPublicUrl(data.path);
+    return { path: data.path, publicUrl: publicData.publicUrl };
   }
 
-  function verifierAnciennesDonnees(report) {
-    if (!report.comments) report.comments = [];
-    if (!report.heureDepart) report.heureDepart = "";
-    if (!report.heureArrivee) report.heureArrivee = "";
-    return report;
+  function installerMessagePublicationSupabase() {
+    if (!form || document.getElementById("real-form-supabase-status")) return;
+    const publishButton = form.querySelector(".publish-button");
+    const status = document.createElement("div");
+    status.id = "real-form-supabase-status";
+    status.className = "real-form-supabase-status";
+    status.textContent = "V2 beta locale : ce formulaire publie dans Supabase.";
+    if (publishButton) publishButton.insertAdjacentElement("afterend", status);
   }
 
-  function reportCorrespondRecherche(report) {
-    const texteRecherche = [
+  async function publierVraiFormulaireDansSupabase(event) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (!currentUser) {
+      openAuthModal();
+      setAuthMessage("Connectez-vous pour publier un report.", "error");
+      return;
+    }
+
+    const publishButton = form.querySelector(".publish-button");
+    const originalText = publishButton ? publishButton.textContent : "Publier le report";
+
+    const title = getInputValue("title");
+    const train = getInputValue("train");
+    const operator = getInputValue("operator");
+    const departureStation = getInputValue("depart");
+    const departureTime = getInputValue("heure-depart") || null;
+    const arrivalStation = getInputValue("arrivee");
+    const arrivalTime = getInputValue("heure-arrivee") || null;
+    const travelDate = getInputValue("date");
+    const travelClass = getInputValue("classe");
+    const conclusion = getInputValue("conclusion");
+    const rating = Number(getInputValue("rating"));
+
+    const missing = [];
+    if (!title) missing.push("Titre du report");
+    if (!train) missing.push("Train");
+    if (!operator) missing.push("Opérateur");
+    if (!departureStation) missing.push("Gare de départ");
+    if (!arrivalStation) missing.push("Gare d’arrivée");
+    if (!travelDate) missing.push("Date du voyage");
+    if (!conclusion) missing.push("Conclusion");
+    if (!rating) missing.push("Note globale");
+
+    if (missing.length > 0) {
+      setPublicationStatus("Champs obligatoires manquants :\n- " + missing.join("\n- "), "error");
+      return;
+    }
+
+    if (publishButton) {
+      publishButton.disabled = true;
+      publishButton.textContent = "Publication Supabase en cours...";
+    }
+
+    try {
+      setPublicationStatus("1/6 — Création du report en brouillon...");
+      const { data: reportData, error: reportError } = await supabaseClient
+        .from("reports")
+        .insert({
+          user_id: currentUser.id,
+          title,
+          train,
+          operator,
+          departure_station: departureStation,
+          departure_time: departureTime,
+          arrival_station: arrivalStation,
+          arrival_time: arrivalTime,
+          travel_date: travelDate,
+          travel_class: travelClass || null,
+          rating,
+          conclusion,
+          status: "draft"
+        })
+        .select("id")
+        .single();
+
+      if (reportError) throw reportError;
+      const reportId = reportData.id;
+
+      setPublicationStatus("2/6 — Création des sections...");
+      const sectionDefinitions = getSectionDefinitions();
+      const sectionsToInsert = sectionDefinitions
+        .filter(function (section) {
+          return getInputValue(section.contentId) || getInputFile(section.photoInputId);
+        })
+        .map(function (section) {
+          return {
+            report_id: reportId,
+            section_type: section.section_type,
+            title: section.title,
+            content: getInputValue(section.contentId) || "",
+            position: section.position
+          };
+        });
+
+      let createdSections = [];
+      if (sectionsToInsert.length > 0) {
+        const { data: sectionsData, error: sectionsError } = await supabaseClient
+          .from("report_sections")
+          .insert(sectionsToInsert)
+          .select("id, section_type, title, position");
+        if (sectionsError) throw sectionsError;
+        createdSections = sectionsData || [];
+      }
+
+      const sectionIdByType = {};
+      createdSections.forEach(function (section) {
+        sectionIdByType[section.section_type] = section.id;
+      });
+
+      const photoRows = [];
+      const coverPhoto = getInputFile("cover-photo");
+
+      if (coverPhoto) {
+        setPublicationStatus("3/6 — Upload de la photo d’accueil...");
+        const uploadedCover = await uploadPhotoSupabase({
+          file: coverPhoto,
+          userId: currentUser.id,
+          reportId,
+          sectionType: "cover",
+          originalName: coverPhoto.name
+        });
+        await supabaseClient.from("reports").update({ cover_photo_url: uploadedCover.publicUrl }).eq("id", reportId);
+        photoRows.push({
+          report_id: reportId,
+          section_id: null,
+          user_id: currentUser.id,
+          photo_url: uploadedCover.publicUrl,
+          caption: "Photo d’accueil du report",
+          position: 0
+        });
+      }
+
+      for (const section of sectionDefinitions) {
+        const file = getInputFile(section.photoInputId);
+        const sectionId = sectionIdByType[section.section_type];
+        if (!file || !sectionId) continue;
+
+        setPublicationStatus("4/6 — Upload photo : " + section.title + "...");
+        const uploaded = await uploadPhotoSupabase({
+          file,
+          userId: currentUser.id,
+          reportId,
+          sectionType: section.section_type,
+          originalName: file.name
+        });
+        photoRows.push({
+          report_id: reportId,
+          section_id: sectionId,
+          user_id: currentUser.id,
+          photo_url: uploaded.publicUrl,
+          caption: section.title,
+          position: section.position
+        });
+      }
+
+      if (photoRows.length > 0) {
+        setPublicationStatus("5/6 — Enregistrement des photos...");
+        const { error: photoError } = await supabaseClient.from("report_photos").insert(photoRows);
+        if (photoError) throw photoError;
+      }
+
+      setPublicationStatus("6/6 — Publication du report...");
+      const { error: publishError } = await supabaseClient
+        .from("reports")
+        .update({ status: "published" })
+        .eq("id", reportId);
+      if (publishError) throw publishError;
+
+      form.reset();
+      if (createReportSection) createReportSection.classList.remove("visible");
+
+      await chargerReportsSupabase();
+      const reportsSection = document.getElementById("reports");
+      if (reportsSection) reportsSection.scrollIntoView({ behavior: "smooth" });
+
+      setPublicationStatus(
+        "Report publié dans Supabase ✅\n\n" +
+        "Report ID : " + reportId + "\n" +
+        "Sections créées : " + createdSections.length + "\n" +
+        "Photos enregistrées : " + photoRows.length + "\n" +
+        "Statut : published",
+        "ok"
+      );
+    } catch (error) {
+      setPublicationStatus("Erreur pendant la publication Supabase :\n" + (error.message || String(error)) + "\n\nLe report peut être resté en brouillon si une étape a échoué.", "error");
+    } finally {
+      if (publishButton) {
+        publishButton.disabled = false;
+        publishButton.textContent = originalText;
+      }
+    }
+  }
+
+  async function chargerReportsSupabase(preserveOpenedId = true) {
+    if (!reportsList || !emptyState) return;
+
+    emptyState.style.display = "block";
+    emptyState.textContent = "Chargement des reports Supabase...";
+    reportsList.innerHTML = "";
+
+    try {
+      const { data: reportsData, error: reportsError } = await supabaseClient
+        .from("reports")
+        .select(`
+          id,
+          user_id,
+          title,
+          train,
+          operator,
+          departure_station,
+          departure_time,
+          arrival_station,
+          arrival_time,
+          travel_date,
+          travel_class,
+          cover_photo_url,
+          rating,
+          conclusion,
+          status,
+          created_at,
+          profiles (
+            username,
+            role,
+            avatar_url
+          )
+        `)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (reportsError) throw reportsError;
+
+      const reportIds = (reportsData || []).map(function (report) { return report.id; });
+
+      let sections = [];
+      let photos = [];
+      let comments = [];
+
+      if (reportIds.length > 0) {
+        const sectionsRes = await supabaseClient
+          .from("report_sections")
+          .select("id, report_id, section_type, title, content, position")
+          .in("report_id", reportIds)
+          .order("position", { ascending: true });
+        if (sectionsRes.error) throw sectionsRes.error;
+        sections = sectionsRes.data || [];
+
+        const photosRes = await supabaseClient
+          .from("report_photos")
+          .select("id, report_id, section_id, photo_url, caption, position")
+          .in("report_id", reportIds)
+          .order("position", { ascending: true });
+        if (photosRes.error) throw photosRes.error;
+        photos = photosRes.data || [];
+
+        const commentsRes = await supabaseClient
+          .from("comments")
+          .select(`
+            id,
+            report_id,
+            user_id,
+            content,
+            created_at,
+            status,
+            profiles (
+              username,
+              role,
+              avatar_url
+            )
+          `)
+          .in("report_id", reportIds)
+          .eq("status", "published")
+          .order("created_at", { ascending: true });
+        if (commentsRes.error) throw commentsRes.error;
+        comments = commentsRes.data || [];
+      }
+
+      reports = (reportsData || []).map(function (report) {
+        return {
+          ...report,
+          sections: sections.filter(function (section) { return section.report_id === report.id; }),
+          photos: photos.filter(function (photo) { return photo.report_id === report.id; }),
+          comments: comments.filter(function (comment) { return comment.report_id === report.id; })
+        };
+      });
+
+      if (!preserveOpenedId) openedReportId = null;
+      afficherReportsSupabase();
+    } catch (error) {
+      emptyState.style.display = "block";
+      emptyState.textContent = "Erreur Supabase : " + error.message;
+    }
+  }
+
+  function reportMatchesSearch(report) {
+    if (!searchQuery.trim()) return true;
+    const haystack = [
       report.title,
       report.train,
       report.operator,
-      report.depart,
-      report.arrivee,
-      report.classe,
-      report.date
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    return texteRecherche.includes(searchQuery.toLowerCase());
+      report.departure_station,
+      report.arrival_station,
+      report.travel_class,
+      report.travel_date,
+      report.profiles?.username
+    ].join(" ").toLowerCase();
+    return haystack.includes(searchQuery.toLowerCase());
   }
 
-  function creerSection(titre, texte, photo) {
-    if (!texte && !photo) return "";
-
-    return `
-      <div class="report-section">
-        <h4>${titre}</h4>
-        ${photo ? `<img src="${photo}" class="section-photo" alt="${titre}">` : ""}
-        ${texte ? `<p>${texte}</p>` : ""}
-      </div>
-    `;
+  function getCoverHtml(report) {
+    const cover = report.cover_photo_url || (report.photos || []).find(function (photo) { return !photo.section_id; })?.photo_url || (report.photos || [])[0]?.photo_url;
+    if (cover) {
+      return `<img src="${escapeHtml(cover)}" class="summary-cover" alt="Photo d’accueil du report">`;
+    }
+    return `<div class="summary-cover summary-cover-placeholder">🚆</div>`;
   }
 
   function creerTrainTGV() {
@@ -286,149 +992,107 @@ document.addEventListener("DOMContentLoaded", function () {
               <stop offset="55%" stop-color="#edf3fb"/>
               <stop offset="100%" stop-color="#d6e2f0"/>
             </linearGradient>
-
             <linearGradient id="tgvBlueGradient" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stop-color="#1d4ed8"/>
               <stop offset="100%" stop-color="#0f3c68"/>
             </linearGradient>
           </defs>
-
           <ellipse cx="120" cy="69" rx="84" ry="5" fill="rgba(15, 23, 42, 0.18)" />
           <circle cx="68" cy="58" r="6" fill="#1f2937"/>
           <circle cx="158" cy="58" r="6" fill="#1f2937"/>
           <rect x="44" y="48" width="128" height="8" rx="4" fill="#27364c"/>
-
-          <path
-            d="M28 46
-               L38 26
-               Q42 16 58 16
-               L142 16
-               Q160 16 176 26
-               L207 43
-               Q219 50 211 55
-               Q205 59 188 59
-               L42 59
-               Q29 59 25 53
-               Q23 49 28 46 Z"
-            fill="url(#tgvBodyGradient)"
-            stroke="#9aacbf"
-            stroke-width="2"
-          />
-
-          <path
-            d="M176 26
-               L207 43
-               Q219 50 211 55
-               Q205 59 188 59
-               L168 59
-               Q176 44 176 26 Z"
-            fill="url(#tgvBlueGradient)"
-          />
-
+          <path d="M28 46 L38 26 Q42 16 58 16 L142 16 Q160 16 176 26 L207 43 Q219 50 211 55 Q205 59 188 59 L42 59 Q29 59 25 53 Q23 49 28 46 Z" fill="url(#tgvBodyGradient)" stroke="#9aacbf" stroke-width="2" />
+          <path d="M176 26 L207 43 Q219 50 211 55 Q205 59 188 59 L168 59 Q176 44 176 26 Z" fill="url(#tgvBlueGradient)" />
           <rect x="50" y="35" width="118" height="6" rx="3" fill="#1d4ed8"/>
           <rect x="58" y="23" width="20" height="9" rx="4" fill="#8ec5ff"/>
           <rect x="84" y="23" width="20" height="9" rx="4" fill="#8ec5ff"/>
           <rect x="110" y="23" width="20" height="9" rx="4" fill="#8ec5ff"/>
           <rect x="136" y="23" width="20" height="9" rx="4" fill="#8ec5ff"/>
-
-          <path
-            d="M182 31
-               Q192 32 202 41
-               L184 41
-               Q179 41 178 36
-               Q177 32 182 31 Z"
-            fill="#b7ddff"
-          />
-
-          <path
-            d="M38 26
-               Q44 16 58 16
-               L66 16
-               Q54 23 49 35
-               L28 46 Z"
-            fill="#f9fbff"
-            opacity="0.9"
-          />
+          <path d="M182 31 Q192 32 202 41 L184 41 Q179 41 178 36 Q177 32 182 31 Z" fill="#b7ddff" />
+          <path d="M38 26 Q44 16 58 16 L66 16 Q54 23 49 35 L28 46 Z" fill="#f9fbff" opacity="0.9" />
         </svg>
-      </div>
-    `;
+      </div>`;
   }
 
-  function creerCarteTrajet(depart, arrivee, heureDepart, heureArrivee) {
+  function creerCarteTrajet(report) {
     return `
       <div class="route-card">
         <h4>Carte du trajet</h4>
-
         <div class="route-cities">
           <div class="city city-start">
-            <span class="city-name">${depart}</span>
-            <span class="city-role">Départ${heureDepart ? " · " + heureDepart : ""}</span>
+            <span class="city-name">${escapeHtml(report.departure_station)}</span>
+            <span class="city-role">Départ${report.departure_time ? " · " + escapeHtml(report.departure_time.slice(0, 5)) : ""}</span>
           </div>
-
           <div class="city city-end">
-            <span class="city-name">${arrivee}</span>
-            <span class="city-role">Arrivée${heureArrivee ? " · " + heureArrivee : ""}</span>
+            <span class="city-name">${escapeHtml(report.arrival_station)}</span>
+            <span class="city-role">Arrivée${report.arrival_time ? " · " + escapeHtml(report.arrival_time.slice(0, 5)) : ""}</span>
           </div>
         </div>
-
         <div class="route-track">
           <div class="route-line"></div>
           ${creerTrainTGV()}
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  function creerCommentairesHTML(report, index) {
-    const comments = report.comments || [];
+  function creerSectionsHtml(report) {
+    if (!report.sections || report.sections.length === 0) {
+      return "";
+    }
 
-    const commentsHTML = comments.length === 0
+    return report.sections.map(function (section) {
+      const sectionPhotos = (report.photos || []).filter(function (photo) { return photo.section_id === section.id; });
+      const photosHtml = sectionPhotos.map(function (photo) {
+        return `<img src="${escapeHtml(photo.photo_url)}" class="section-photo" alt="${escapeHtml(photo.caption || section.title)}">`;
+      }).join("");
+
+      return `
+        <div class="report-section">
+          <h4>${escapeHtml(section.title)}</h4>
+          ${photosHtml}
+          ${section.content ? `<p>${escapeHtml(section.content)}</p>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function creerCommentairesHtml(report) {
+    const comments = report.comments || [];
+    const listHtml = comments.length === 0
       ? `<p class="no-comments">Aucun commentaire pour le moment.</p>`
       : comments.map(function (comment) {
           return `
             <div class="comment">
-              <p>${comment.text}</p>
-              <span>${comment.date}</span>
-            </div>
-          `;
+              <span class="comment-author">${escapeHtml(getAuthorLabel(comment.profiles))}</span>
+              <p>${escapeHtml(comment.content)}</p>
+              <span>${comment.created_at ? escapeHtml(formaterDate(comment.created_at.slice(0, 10))) : ""}</span>
+            </div>`;
         }).join("");
 
     return `
       <div class="interaction-section">
         <h4>Commentaires</h4>
-
-        <form class="comment-form" data-index="${index}">
+        <form class="comment-form" data-report-id="${escapeHtml(report.id)}">
           <textarea class="comment-input" placeholder="Écrire un commentaire..." rows="3" required></textarea>
           <button type="submit">Publier le commentaire</button>
         </form>
-
         <div class="comments-list">
-          ${commentsHTML}
+          ${listHtml}
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  function afficherReports() {
+  function afficherReportsSupabase() {
     reportsList.innerHTML = "";
-    reports = reports.map(verifierAnciennesDonnees);
 
-    const reportsFiltres = reports
-      .map(function (report, index) {
-        return { report: report, index: index };
-      })
-      .filter(function (item) {
-        if (!searchQuery.trim()) return true;
-        return reportCorrespondRecherche(item.report);
-      });
+    const filtered = reports.filter(reportMatchesSearch);
 
     if (reports.length === 0) {
       emptyState.style.display = "block";
-      emptyState.textContent = "Aucun report pour le moment. Publiez le premier report RailReporters.";
+      emptyState.textContent = "Aucun report Supabase publié pour le moment.";
       return;
     }
 
-    if (reportsFiltres.length === 0) {
+    if (filtered.length === 0) {
       emptyState.style.display = "block";
       emptyState.textContent = "Aucun report ne correspond à votre recherche.";
       return;
@@ -436,177 +1100,118 @@ document.addEventListener("DOMContentLoaded", function () {
 
     emptyState.style.display = "none";
 
-    reportsFiltres.forEach(function (item) {
-      const report = item.report;
-      const index = item.index;
-
-      const reportElement = document.createElement("article");
-      reportElement.className = "report-card";
-      reportElement.id = `report-card-${index}`;
-
-      const coverHTML = report.coverPhoto
-        ? `<img src="${report.coverPhoto}" class="summary-cover" alt="Photo d’accueil du report">`
-        : `<div class="summary-cover summary-cover-placeholder">🚆</div>`;
-
+    filtered.forEach(function (report) {
+      const isOpen = openedReportId === report.id;
       const horairesResume = `
-        ${report.heureDepart ? `Départ : ${report.heureDepart}` : ""}
-        ${report.heureDepart && report.heureArrivee ? " · " : ""}
-        ${report.heureArrivee ? `Arrivée : ${report.heureArrivee}` : ""}
+        ${report.departure_time ? `Départ : ${report.departure_time.slice(0, 5)}` : ""}
+        ${report.departure_time && report.arrival_time ? " · " : ""}
+        ${report.arrival_time ? `Arrivée : ${report.arrival_time.slice(0, 5)}` : ""}
       `;
 
-      const isOpen = openedReportIndex === index;
-
-      reportElement.innerHTML = `
+      const article = document.createElement("article");
+      article.className = "report-card";
+      article.id = `report-card-${report.id}`;
+      article.innerHTML = `
         <div class="report-summary">
-          ${coverHTML}
-
+          ${getCoverHtml(report)}
           <div class="summary-info">
-            <h3>${report.title}</h3>
-
+            <h3>${escapeHtml(report.title)}</h3>
+            <p class="author-line">Par ${escapeHtml(getAuthorLabel(report.profiles))}</p>
             <p class="report-meta">
-              <strong>${report.train}</strong> · ${report.operator}
+              <strong>${escapeHtml(report.train)}</strong> · ${escapeHtml(report.operator)}
               <br>
-              ${report.depart} → ${report.arrivee}
+              ${escapeHtml(report.departure_station)} → ${escapeHtml(report.arrival_station)}
               <br>
-              Date : ${formaterDate(report.date)} ${report.classe ? `· Classe : ${report.classe}` : ""}
-              ${horairesResume.trim() ? `<br>${horairesResume}` : ""}
+              Date : ${escapeHtml(formaterDate(report.travel_date))} ${report.travel_class ? `· Classe : ${escapeHtml(report.travel_class)}` : ""}
+              ${horairesResume.trim() ? `<br>${escapeHtml(horairesResume.trim())}` : ""}
             </p>
-
             <p class="rating">${afficherEtoiles(report.rating)}</p>
-
-            <button class="open-report-button" data-index="${index}">
+            <button class="open-report-button" data-report-id="${escapeHtml(report.id)}">
               ${isOpen ? "Fermer le report" : "Lire le report"}
             </button>
           </div>
         </div>
 
-        <div class="report-details ${isOpen ? "" : "hidden"}" id="report-details-${index}">
+        <div class="report-details ${isOpen ? "" : "hidden"}" id="report-details-${escapeHtml(report.id)}">
           <div class="report-content">
-            ${creerCarteTrajet(report.depart, report.arrivee, report.heureDepart, report.heureArrivee)}
-
-            ${creerSection("Arrivée en gare", report.stationArrivalText, report.stationArrivalPhoto)}
-            ${creerSection("Expérience en gare", report.stationExperienceText, report.stationExperiencePhoto)}
-            ${creerSection("Embarquement", report.boardingText, report.boardingPhoto)}
-            ${creerSection("À bord du train", report.onboardText, report.onboardPhoto)}
-            ${creerSection("Services à bord", report.servicesText, report.servicesPhoto)}
-            ${creerSection("Arrivée à destination", report.arrivalText, report.arrivalPhoto)}
-
+            <div class="report-section">
+              <h4>Auteur du report</h4>
+              <p>${escapeHtml(getAuthorLabel(report.profiles))}</p>
+            </div>
+            ${creerCarteTrajet(report)}
+            ${creerSectionsHtml(report)}
             <div class="report-section">
               <h4>Conclusion</h4>
-              <p>${report.conclusion}</p>
+              <p>${escapeHtml(report.conclusion)}</p>
               <p class="rating">${afficherEtoiles(report.rating)}</p>
             </div>
-
-            ${creerCommentairesHTML(report, index)}
-
+            ${creerCommentairesHtml(report)}
             <div class="report-bottom-actions">
-              <button class="close-report-bottom-button" data-index="${index}">
-                Fermer le report
-              </button>
-
-              <button class="delete-button" data-index="${index}">
-                Supprimer ce report
-              </button>
+              <button class="close-report-bottom-button" data-report-id="${escapeHtml(report.id)}">Fermer le report</button>
             </div>
           </div>
-        </div>
-      `;
-
-      reportsList.appendChild(reportElement);
+        </div>`;
+      reportsList.appendChild(article);
     });
 
-    const openButtons = document.querySelectorAll(".open-report-button");
-
-    openButtons.forEach(function (button) {
+    document.querySelectorAll(".open-report-button").forEach(function (button) {
       button.addEventListener("click", function () {
-        const index = Number(button.getAttribute("data-index"));
-
-        if (openedReportIndex === index) {
-          openedReportIndex = null;
-        } else {
-          openedReportIndex = index;
-        }
-
-        afficherReports();
-
-        if (openedReportIndex !== null) {
-          const card = document.getElementById(`report-card-${openedReportIndex}`);
-          if (card) {
-            card.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
+        const reportId = button.getAttribute("data-report-id");
+        openedReportId = openedReportId === reportId ? null : reportId;
+        afficherReportsSupabase();
+        if (openedReportId) {
+          const card = document.getElementById(`report-card-${openedReportId}`);
+          if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
     });
 
-    const closeBottomButtons = document.querySelectorAll(".close-report-bottom-button");
-
-    closeBottomButtons.forEach(function (button) {
+    document.querySelectorAll(".close-report-bottom-button").forEach(function (button) {
       button.addEventListener("click", function () {
-        const index = Number(button.getAttribute("data-index"));
-        openedReportIndex = null;
-        afficherReports();
-
-        const card = document.getElementById(`report-card-${index}`);
-        if (card) {
-          card.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        const reportId = button.getAttribute("data-report-id");
+        openedReportId = null;
+        afficherReportsSupabase();
+        const card = document.getElementById(`report-card-${reportId}`);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
 
-    const commentForms = document.querySelectorAll(".comment-form");
-
-    commentForms.forEach(function (commentForm) {
-      commentForm.addEventListener("submit", function (event) {
+    document.querySelectorAll(".comment-form").forEach(function (commentForm) {
+      commentForm.addEventListener("submit", async function (event) {
         event.preventDefault();
 
-        const index = Number(commentForm.getAttribute("data-index"));
+        if (!currentUser) {
+          openAuthModal();
+          setAuthMessage("Connectez-vous pour commenter.", "error");
+          return;
+        }
+
+        const reportId = commentForm.getAttribute("data-report-id");
         const input = commentForm.querySelector(".comment-input");
-        const text = input.value.trim();
+        const content = input.value.trim();
+        if (!content) return;
 
-        if (!text) return;
+        const button = commentForm.querySelector("button");
+        button.disabled = true;
+        button.textContent = "Publication...";
 
-        reports[index] = verifierAnciennesDonnees(reports[index]);
-
-        reports[index].comments.unshift({
-          text: text,
-          date: new Date().toLocaleDateString("fr-FR")
-        });
-
-        openedReportIndex = index;
-
-        if (!sauvegarderReports()) {
-          return;
+        try {
+          const { error } = await supabaseClient.from("comments").insert({
+            report_id: reportId,
+            user_id: currentUser.id,
+            content,
+            status: "published"
+          });
+          if (error) throw error;
+          input.value = "";
+          openedReportId = reportId;
+          await chargerReportsSupabase(true);
+        } catch (error) {
+          alert("Erreur commentaire Supabase : " + error.message);
+        } finally {
+          button.disabled = false;
+          button.textContent = "Publier le commentaire";
         }
-
-        afficherReports();
-
-        const details = document.getElementById(`report-details-${index}`);
-        if (details) {
-          details.scrollIntoView({ behavior: "smooth", block: "end" });
-        }
-      });
-    });
-
-    const deleteButtons = document.querySelectorAll(".delete-button");
-
-    deleteButtons.forEach(function (button) {
-      button.addEventListener("click", function () {
-        const index = Number(button.getAttribute("data-index"));
-
-        const confirmation = confirm(
-          "Es-tu sûr de vouloir supprimer ce report ? Cette action est définitive."
-        );
-
-        if (!confirmation) return;
-
-        reports.splice(index, 1);
-        openedReportIndex = null;
-
-        if (!sauvegarderReports()) {
-          return;
-        }
-
-        afficherReports();
       });
     });
   }
@@ -614,110 +1219,35 @@ document.addEventListener("DOMContentLoaded", function () {
   if (searchInput) {
     searchInput.addEventListener("input", function () {
       searchQuery = searchInput.value.trim();
-      openedReportIndex = null;
-      afficherReports();
+      openedReportId = null;
+      afficherReportsSupabase();
     });
   }
 
-  form.addEventListener("submit", async function (event) {
-    event.preventDefault();
+  if (backToTopButton) {
+    backToTopButton.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
 
-    const publishButton = form.querySelector(".publish-button");
-    const originalButtonText = publishButton ? publishButton.textContent : "";
+  if (form) {
+    installerMessagePublicationSupabase();
+    form.addEventListener("submit", publierVraiFormulaireDansSupabase, true);
+  }
 
-    if (publishButton) {
-      publishButton.disabled = true;
-      publishButton.textContent = "Publication en cours...";
-    }
+  installerStylesV2();
+  createAuthUI();
+  initializeAuth();
+  protectPublishLinks();
 
-    try {
-      const title = document.getElementById("title").value.trim();
-      const train = document.getElementById("train").value.trim();
-      const operator = document.getElementById("operator").value.trim();
-      const depart = document.getElementById("depart").value.trim();
-      const heureDepart = document.getElementById("heure-depart").value;
-      const arrivee = document.getElementById("arrivee").value.trim();
-      const heureArrivee = document.getElementById("heure-arrivee").value;
-      const date = document.getElementById("date").value;
-      const classe = document.getElementById("classe").value.trim();
-      const conclusion = document.getElementById("conclusion").value.trim();
-      const rating = document.getElementById("rating").value;
-
-      const champsManquants = [];
-
-      if (!title) champsManquants.push("Titre du report");
-      if (!train) champsManquants.push("Train");
-      if (!operator) champsManquants.push("Opérateur");
-      if (!depart) champsManquants.push("Gare de départ");
-      if (!arrivee) champsManquants.push("Gare d’arrivée");
-      if (!date) champsManquants.push("Date du voyage");
-      if (!conclusion) champsManquants.push("Conclusion");
-      if (!rating) champsManquants.push("Note globale");
-
-      if (champsManquants.length > 0) {
-        alert("Merci de remplir les champs obligatoires suivants :\n- " + champsManquants.join("\n- "));
-        return;
+  refreshSession()
+    .then(function () {
+      return chargerReportsSupabase(false);
+    })
+    .catch(function (error) {
+      if (emptyState) {
+        emptyState.style.display = "block";
+        emptyState.textContent = "Erreur initialisation Supabase : " + error.message;
       }
-
-      const newReport = {
-        title: title,
-        coverPhoto: await lireImage("cover-photo"),
-        train: train,
-        operator: operator,
-        depart: depart,
-        heureDepart: heureDepart,
-        arrivee: arrivee,
-        heureArrivee: heureArrivee,
-        date: date,
-        classe: classe,
-
-        stationArrivalText: document.getElementById("station-arrival-text").value.trim(),
-        stationArrivalPhoto: await lireImage("station-arrival-photo"),
-
-        stationExperienceText: document.getElementById("station-experience-text").value.trim(),
-        stationExperiencePhoto: await lireImage("station-experience-photo"),
-
-        boardingText: document.getElementById("boarding-text").value.trim(),
-        boardingPhoto: await lireImage("boarding-photo"),
-
-        onboardText: document.getElementById("onboard-text").value.trim(),
-        onboardPhoto: await lireImage("onboard-photo"),
-
-        servicesText: document.getElementById("services-text").value.trim(),
-        servicesPhoto: await lireImage("services-photo"),
-
-        arrivalText: document.getElementById("arrival-text").value.trim(),
-        arrivalPhoto: await lireImage("arrival-photo"),
-
-        conclusion: conclusion,
-        rating: rating,
-        comments: []
-      };
-
-      reports.unshift(newReport);
-      openedReportIndex = 0;
-
-      if (!sauvegarderReports()) {
-        reports.shift();
-        openedReportIndex = null;
-        return;
-      }
-
-      afficherReports();
-      form.reset();
-
-      if (createReportSection) {
-        createReportSection.classList.remove("visible");
-      }
-
-      document.getElementById("reports").scrollIntoView({ behavior: "smooth" });
-    } finally {
-      if (publishButton) {
-        publishButton.disabled = false;
-        publishButton.textContent = originalButtonText || "Publier le report";
-      }
-    }
-  });
-
-  afficherReports();
+    });
 });
