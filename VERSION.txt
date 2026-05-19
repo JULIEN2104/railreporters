@@ -1,6 +1,7 @@
-RailReporters — Version stable
+RailReporters — Version stable et préparation V2
 
-Version actuelle : V1.2 — Lecture des reports améliorée
+Version publique actuelle :
+V1.2 — Version stable en ligne
 
 Domaine principal :
 https://railreporters.com
@@ -8,34 +9,69 @@ https://railreporters.com
 Redirection :
 https://railreporters.fr → https://railreporters.com
 
-Fonctionnalités validées :
+Version locale actuelle :
+V2 beta locale — validée
+
+Important :
+La V2 beta fonctionne actuellement en local, mais elle n’est pas encore publiée sur railreporters.com.
+
+Fonctionnalités validées en V1.2 publique :
 - accueil avec image locale
-- design plus coloré et moins terne
-- cartes de présentation Raconter / Illustrer / Découvrir corrigées
+- design coloré stabilisé
 - recherche fonctionnelle
-- publication de reports
-- formulaire de publication masqué par défaut puis affiché au clic
-- aide à la publication ajoutée
-- bouton Annuler / fermer le formulaire
+- publication locale de reports
+- formulaire masqué puis affiché au clic
 - compression automatique des photos
 - cartes résumé des reports
 - report complet avec sections, photos et commentaires
-- photos affichées avant le texte
 - carte visuelle du trajet avec animation
-- horaires départ / arrivée
-- lecture du report ouvert améliorée
-- conclusion mieux mise en valeur
-- zone commentaires améliorée
 - suppression avec confirmation
 - bouton retour en haut
 - compatibilité ordinateur et tablette testée
-- railreporters.com fonctionnel
-- www.railreporters.com fonctionnel
-- railreporters.fr redirige vers railreporters.com
 
-Limite actuelle :
-Les reports sont encore sauvegardés dans le navigateur de chaque utilisateur via localStorage.
-Ils ne sont pas encore partagés entre tous les visiteurs.
+Fonctionnalités validées en V2 beta locale :
+- authentification Supabase
+- connexion / déconnexion
+- session utilisateur reconnue automatiquement
+- profil utilisateur récupéré depuis profiles
+- rôle admin affiché
+- publication protégée si utilisateur non connecté
+- vrai formulaire RailReporters connecté à Supabase
+- création de reports dans Supabase
+- création des sections dans report_sections
+- upload photo dans Supabase Storage
+- création des lignes report_photos
+- affichage des reports Supabase dans Derniers reports
+- affichage de l’auteur du report
+- création de commentaires Supabase
+- affichage de l’auteur des commentaires
 
-Prochaine grande étape :
-Préparer une vraie version communautaire avec comptes utilisateurs, base de données partagée, stockage serveur des photos et modération.
+État Supabase :
+- projet railreporters actif
+- tables créées
+- Auth validé
+- profiles validé
+- reports validé
+- report_sections validé
+- report_photos validé
+- comments validé
+- bucket report-photos validé
+- upload Storage validé
+
+Sécurité :
+- aucune clé secret ou service_role ne doit être utilisée côté navigateur
+- seule la clé publishable peut être utilisée côté frontend
+- les tables publiques doivent rester protégées par RLS
+- les uploads Storage doivent rester contrôlés par policies
+
+Décision actuelle :
+Ne pas publier immédiatement la V2 beta sans dernière vérification.
+
+Prochaine étape :
+Préparer la mise en ligne contrôlée de la V2 beta :
+- vérifier les fichiers à envoyer sur GitHub
+- vérifier les clés
+- vérifier RLS
+- vérifier Storage
+- décider si les zones localStorage doivent rester visibles
+- tester après déploiement Vercel
