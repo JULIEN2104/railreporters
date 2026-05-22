@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version locale propre : Auth + reports Supabase + vrai formulaire.
+     Version V2 beta : Auth + reports Supabase + vrai formulaire + messages utilisateur améliorés.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -106,6 +106,62 @@ document.addEventListener("DOMContentLoaded", function () {
     status.className = "real-form-supabase-status";
     if (type === "ok") status.classList.add("ok");
     if (type === "error") status.classList.add("error");
+  }
+
+  function isCurrentUserBanned() {
+    return Boolean(currentProfile && currentProfile.is_banned === true);
+  }
+
+  function getFriendlySupabaseError(error, context = "general") {
+    const rawMessage = (error && error.message) ? String(error.message) : String(error || "Erreur inconnue");
+    const lower = rawMessage.toLowerCase();
+    const code = error && error.code ? String(error.code) : "";
+    const status = error && error.status ? String(error.status) : "";
+
+    const isRlsError =
+      lower.includes("row-level security") ||
+      lower.includes("row level security") ||
+      lower.includes("violates row") ||
+      code === "42501" ||
+      status === "403";
+
+    if (isRlsError) {
+      if (isCurrentUserBanned()) {
+        return "Votre compte est actuellement bloqué. Vous ne pouvez pas publier, commenter ou envoyer de photo. Contactez l’administrateur RailReporters si vous pensez qu’il s’agit d’une erreur.";
+      }
+
+      if (context === "publish") {
+        return "La publication n’est pas autorisée avec ce compte. Vérifiez que vous êtes bien connecté, puis réessayez.";
+      }
+
+      if (context === "comment") {
+        return "Le commentaire n’a pas pu être publié. Cette action n’est pas autorisée avec ce compte.";
+      }
+
+      if (context === "upload") {
+        return "L’envoi de la photo n’a pas été autorisé. Vérifiez que vous êtes connecté et que votre compte est autorisé à publier.";
+      }
+
+      return "Cette action n’est pas autorisée avec votre compte.";
+    }
+
+    if (lower.includes("invalid login credentials")) {
+      return "Email ou mot de passe incorrect.";
+    }
+
+    if (lower.includes("email not confirmed")) {
+      return "Votre email n’est pas encore confirmé. Vérifiez votre boîte mail avant de vous connecter.";
+    }
+
+    if (lower.includes("already registered") || lower.includes("user already registered")) {
+      return "Un compte existe déjà avec cet email. Essayez de vous connecter.";
+    }
+
+    if (lower.includes("network") || lower.includes("failed to fetch")) {
+      return "Erreur réseau. Vérifiez votre connexion Internet puis réessayez.";
+    }
+
+    return rawMessage;
   }
 
   function installerStylesV2() {
@@ -481,7 +537,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       if (error) {
-        setAuthMessage("Erreur de connexion :\n" + error.message, "error");
+        setAuthMessage("Erreur de connexion :\n" + getFriendlySupabaseError(error, "auth"), "error");
         return;
       }
 
@@ -498,7 +554,7 @@ document.addEventListener("DOMContentLoaded", function () {
       );
       chargerReportsSupabase();
     } catch (error) {
-      setAuthMessage("Erreur technique :\n" + error.message, "error");
+      setAuthMessage("Erreur technique :\n" + getFriendlySupabaseError(error, "auth"), "error");
     } finally {
       login.disabled = false;
     }
@@ -529,7 +585,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       if (error) {
-        setAuthMessage("Erreur création compte :\n" + error.message, "error");
+        setAuthMessage("Erreur création compte :\n" + getFriendlySupabaseError(error, "auth"), "error");
         return;
       }
 
@@ -543,7 +599,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setAuthMessage("Compte créé. Vérifiez votre email si une confirmation est demandée.", "ok");
       }
     } catch (error) {
-      setAuthMessage("Erreur technique :\n" + error.message, "error");
+      setAuthMessage("Erreur technique :\n" + getFriendlySupabaseError(error, "auth"), "error");
     } finally {
       signup.disabled = false;
     }
@@ -656,7 +712,7 @@ document.addEventListener("DOMContentLoaded", function () {
         upsert: false,
         contentType: "image/jpeg"
       });
-    if (error) throw error;
+    if (error) throw new Error(getFriendlySupabaseError(error, "upload"));
     const { data: publicData } = supabaseClient.storage
       .from("report-photos")
       .getPublicUrl(data.path);
@@ -669,7 +725,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const status = document.createElement("div");
     status.id = "real-form-supabase-status";
     status.className = "real-form-supabase-status";
-    status.textContent = "V2 beta locale : ce formulaire publie dans Supabase.";
+    status.textContent = "V2 beta : ce formulaire publie dans Supabase.";
     if (publishButton) publishButton.insertAdjacentElement("afterend", status);
   }
 
@@ -680,6 +736,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!currentUser) {
       openAuthModal();
       setAuthMessage("Connectez-vous pour publier un report.", "error");
+      return;
+    }
+
+    if (isCurrentUserBanned()) {
+      setPublicationStatus("Votre compte est actuellement bloqué. Vous ne pouvez pas publier de report. Contactez l’administrateur RailReporters si vous pensez qu’il s’agit d’une erreur.", "error");
       return;
     }
 
@@ -849,7 +910,7 @@ document.addEventListener("DOMContentLoaded", function () {
         "ok"
       );
     } catch (error) {
-      setPublicationStatus("Erreur pendant la publication Supabase :\n" + (error.message || String(error)) + "\n\nLe report peut être resté en brouillon si une étape a échoué.", "error");
+      setPublicationStatus("Erreur pendant la publication :\n" + getFriendlySupabaseError(error, "publish") + "\n\nLe report peut être resté en brouillon si une étape a échoué.", "error");
     } finally {
       if (publishButton) {
         publishButton.disabled = false;
@@ -955,7 +1016,7 @@ document.addEventListener("DOMContentLoaded", function () {
       afficherReportsSupabase();
     } catch (error) {
       emptyState.style.display = "block";
-      emptyState.textContent = "Erreur Supabase : " + error.message;
+      emptyState.textContent = "Erreur Supabase : " + getFriendlySupabaseError(error, "read");
     }
   }
 
@@ -1186,6 +1247,11 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
+        if (isCurrentUserBanned()) {
+          alert("Votre compte est actuellement bloqué. Vous ne pouvez pas publier de commentaire.");
+          return;
+        }
+
         const reportId = commentForm.getAttribute("data-report-id");
         const input = commentForm.querySelector(".comment-input");
         const content = input.value.trim();
@@ -1207,7 +1273,7 @@ document.addEventListener("DOMContentLoaded", function () {
           openedReportId = reportId;
           await chargerReportsSupabase(true);
         } catch (error) {
-          alert("Erreur commentaire Supabase : " + error.message);
+          alert(getFriendlySupabaseError(error, "comment"));
         } finally {
           button.disabled = false;
           button.textContent = "Publier le commentaire";
@@ -1247,7 +1313,7 @@ document.addEventListener("DOMContentLoaded", function () {
     .catch(function (error) {
       if (emptyState) {
         emptyState.style.display = "block";
-        emptyState.textContent = "Erreur initialisation Supabase : " + error.message;
+        emptyState.textContent = "Erreur initialisation Supabase : " + getFriendlySupabaseError(error, "read");
       }
     });
 });
