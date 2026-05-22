@@ -146,6 +146,10 @@ document.addEventListener("DOMContentLoaded", function () {
         return "Impossible de masquer ce report. Cette action est réservée à l’administrateur RailReporters.";
       }
 
+      if (context === "admin-hide-comment") {
+        return "Impossible de masquer ce commentaire. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
       return "Cette action n’est pas autorisée avec votre compte.";
     }
 
@@ -1125,11 +1129,25 @@ document.addEventListener("DOMContentLoaded", function () {
     const listHtml = comments.length === 0
       ? `<p class="no-comments">Aucun commentaire pour le moment.</p>`
       : comments.map(function (comment) {
+          const adminButton = canCurrentUserManageComments()
+            ? `<div class="admin-comment-actions">
+                <button
+                  class="admin-hide-comment-button"
+                  data-comment-id="${escapeHtml(comment.id)}"
+                  data-report-id="${escapeHtml(report.id)}"
+                  data-comment-author="${escapeHtml(getAuthorLabel(comment.profiles))}"
+                >
+                  Masquer ce commentaire
+                </button>
+              </div>`
+            : "";
+
           return `
             <div class="comment">
               <span class="comment-author">${escapeHtml(getAuthorLabel(comment.profiles))}</span>
               <p>${escapeHtml(comment.content)}</p>
               <span>${comment.created_at ? escapeHtml(formaterDate(comment.created_at.slice(0, 10))) : ""}</span>
+              ${adminButton}
             </div>`;
         }).join("");
 
@@ -1147,6 +1165,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function canCurrentUserManageReports() {
+    const role = currentProfile && currentProfile.role;
+    return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
+  }
+
+  function canCurrentUserManageComments() {
     const role = currentProfile && currentProfile.role;
     return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
   }
@@ -1296,6 +1319,48 @@ document.addEventListener("DOMContentLoaded", function () {
           alert("Report masqué avec succès.");
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-hide-report"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+
+    document.querySelectorAll(".admin-hide-comment-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const commentId = button.getAttribute("data-comment-id");
+        const reportId = button.getAttribute("data-report-id");
+        const commentAuthor = button.getAttribute("data-comment-author") || "ce commentaire";
+
+        if (!canCurrentUserManageComments()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous vraiment masquer ce commentaire ?\n\n" +
+          "Auteur : " + commentAuthor + "\n\n" +
+          "Il ne sera plus visible publiquement, mais restera conservé dans Supabase."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Masquage...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("comments")
+            .update({ status: "hidden" })
+            .eq("id", commentId);
+
+          if (error) throw error;
+
+          openedReportId = reportId;
+          await chargerReportsSupabase(true);
+          alert("Commentaire masqué avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-hide-comment"));
           button.disabled = false;
           button.textContent = originalText;
         }

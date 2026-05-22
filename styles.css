@@ -1378,3 +1378,38 @@ body {
   background: rgba(254, 242, 242, 0.92) !important;
   border-color: rgba(252, 165, 165, 0.65) !important;
 }
+
+
+/* MODÉRATION COMMENTAIRES ADMIN */
+
+.admin-comment-actions {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(220, 38, 38, 0.22);
+}
+
+.admin-hide-comment-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 13px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(220, 38, 38, 0.18);
+}
+
+.admin-hide-comment-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.96;
+}
+
+.admin-hide-comment-button:disabled {
+  opacity: 0.60;
+  cursor: not-allowed;
+  transform: none;
+}
