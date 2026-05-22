@@ -142,6 +142,10 @@ document.addEventListener("DOMContentLoaded", function () {
         return "L’envoi de la photo n’a pas été autorisé. Vérifiez que vous êtes connecté et que votre compte est autorisé à publier.";
       }
 
+      if (context === "admin-hide-report") {
+        return "Impossible de masquer ce report. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
       return "Cette action n’est pas autorisée avec votre compte.";
     }
 
@@ -1142,6 +1146,25 @@ document.addEventListener("DOMContentLoaded", function () {
       </div>`;
   }
 
+  function canCurrentUserManageReports() {
+    const role = currentProfile && currentProfile.role;
+    return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
+  }
+
+  function creerAdminReportActionsHtml(report) {
+    if (!canCurrentUserManageReports()) return "";
+
+    return `
+      <div class="report-section admin-report-actions">
+        <h4>Modération admin</h4>
+        <p>Ce report est actuellement visible publiquement.</p>
+        <button class="admin-hide-report-button" data-report-id="${escapeHtml(report.id)}" data-report-title="${escapeHtml(report.title)}">
+          Masquer ce report
+        </button>
+        <p class="admin-help-text">Le report passera en statut hidden et ne sera plus visible publiquement. Les photos et commentaires restent conservés.</p>
+      </div>`;
+  }
+
   function afficherReportsSupabase() {
     reportsList.innerHTML = "";
 
@@ -1207,6 +1230,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <p class="rating">${afficherEtoiles(report.rating)}</p>
             </div>
             ${creerCommentairesHtml(report)}
+            ${creerAdminReportActionsHtml(report)}
             <div class="report-bottom-actions">
               <button class="close-report-bottom-button" data-report-id="${escapeHtml(report.id)}">Fermer le report</button>
             </div>
@@ -1234,6 +1258,47 @@ document.addEventListener("DOMContentLoaded", function () {
         afficherReportsSupabase();
         const card = document.getElementById(`report-card-${reportId}`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+
+    document.querySelectorAll(".admin-hide-report-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const reportId = button.getAttribute("data-report-id");
+        const reportTitle = button.getAttribute("data-report-title") || "ce report";
+
+        if (!canCurrentUserManageReports()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous vraiment masquer ce report ?\n\n" +
+          reportTitle + "\n\n" +
+          "Il ne sera plus visible publiquement, mais restera conservé dans Supabase."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Masquage...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("reports")
+            .update({ status: "hidden" })
+            .eq("id", reportId);
+
+          if (error) throw error;
+
+          openedReportId = null;
+          await chargerReportsSupabase(false);
+          alert("Report masqué avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-hide-report"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
       });
     });
 
