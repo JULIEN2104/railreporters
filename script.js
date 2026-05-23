@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + vrai formulaire + messages utilisateur améliorés.
+     Version V2 beta : Auth + reports Supabase + modération admin restaurer report.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -21,8 +21,12 @@ document.addEventListener("DOMContentLoaded", function () {
   let currentUser = null;
   let currentProfile = null;
   let reports = [];
+  let hiddenReports = [];
   let openedReportId = null;
   let searchQuery = "";
+  let adminHiddenReportsSection = null;
+  let adminHiddenReportsList = null;
+  let adminHiddenReportsEmpty = null;
 
   if (!window.supabase) {
     console.error("Supabase n'est pas chargé.");
@@ -491,6 +495,10 @@ document.addEventListener("DOMContentLoaded", function () {
       badge.className = "auth-status-badge";
       badge.textContent = "Non connecté";
       loginButton.textContent = "Se connecter";
+      hiddenReports = [];
+      if (adminHiddenReportsSection) {
+        adminHiddenReportsSection.style.display = "none";
+      }
       return;
     }
 
@@ -1022,6 +1030,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (!preserveOpenedId) openedReportId = null;
       afficherReportsSupabase();
+      chargerReportsMasquesAdmin().catch(function (hiddenError) {
+        console.warn("Erreur chargement reports masqués admin", hiddenError);
+      });
     } catch (error) {
       emptyState.style.display = "block";
       emptyState.textContent = "Erreur Supabase : " + getFriendlySupabaseError(error, "read");
@@ -1188,6 +1199,174 @@ document.addEventListener("DOMContentLoaded", function () {
       </div>`;
   }
 
+  function ensureAdminHiddenReportsSection() {
+    if (adminHiddenReportsSection) return adminHiddenReportsSection;
+
+    const reportsSection = document.getElementById("reports");
+    if (!reportsSection || !reportsSection.parentNode) return null;
+
+    adminHiddenReportsSection = document.createElement("section");
+    adminHiddenReportsSection.id = "admin-hidden-reports-section";
+    adminHiddenReportsSection.className = "content-section admin-hidden-reports-section";
+    adminHiddenReportsSection.style.display = "none";
+    adminHiddenReportsSection.innerHTML = `
+      <div class="section-header">
+        <h2>Espace admin — Reports masqués</h2>
+        <p>Liste réservée à l’administrateur pour restaurer les reports passés en hidden.</p>
+      </div>
+      <p id="admin-hidden-reports-empty" class="empty-state">Aucun report masqué pour le moment.</p>
+      <div id="admin-hidden-reports-list" class="admin-hidden-reports-list"></div>
+    `;
+
+    reportsSection.parentNode.insertBefore(adminHiddenReportsSection, reportsSection.nextSibling);
+
+    adminHiddenReportsList = adminHiddenReportsSection.querySelector("#admin-hidden-reports-list");
+    adminHiddenReportsEmpty = adminHiddenReportsSection.querySelector("#admin-hidden-reports-empty");
+
+    return adminHiddenReportsSection;
+  }
+
+  function creerAdminHiddenReportCardHtml(report) {
+    return `
+      <article class="admin-hidden-report-card">
+        <div>
+          <span class="admin-hidden-report-status">hidden</span>
+          <h3>${escapeHtml(report.title)}</h3>
+          <p class="author-line">Par ${escapeHtml(getAuthorLabel(report.profiles))}</p>
+          <p>
+            <strong>${escapeHtml(report.train || "Train non renseigné")}</strong>${report.operator ? " · " + escapeHtml(report.operator) : ""}
+            <br>
+            ${escapeHtml(report.departure_station || "Départ non renseigné")} → ${escapeHtml(report.arrival_station || "Arrivée non renseignée")}
+            <br>
+            ${report.travel_date ? "Date : " + escapeHtml(formaterDate(report.travel_date)) : "Date non renseignée"}
+          </p>
+        </div>
+        <button
+          class="admin-restore-report-button"
+          data-report-id="${escapeHtml(report.id)}"
+          data-report-title="${escapeHtml(report.title)}"
+        >
+          Restaurer ce report
+        </button>
+      </article>`;
+  }
+
+  function afficherReportsMasquesAdmin() {
+    const section = ensureAdminHiddenReportsSection();
+    if (!section || !adminHiddenReportsList || !adminHiddenReportsEmpty) return;
+
+    if (!canCurrentUserManageReports()) {
+      section.style.display = "none";
+      return;
+    }
+
+    section.style.display = "block";
+    adminHiddenReportsList.innerHTML = "";
+
+    if (hiddenReports.length === 0) {
+      adminHiddenReportsEmpty.style.display = "block";
+      adminHiddenReportsEmpty.textContent = "Aucun report masqué pour le moment.";
+      return;
+    }
+
+    adminHiddenReportsEmpty.style.display = "none";
+    adminHiddenReportsList.innerHTML = hiddenReports.map(creerAdminHiddenReportCardHtml).join("");
+
+    adminHiddenReportsList.querySelectorAll(".admin-restore-report-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const reportId = button.getAttribute("data-report-id");
+        const reportTitle = button.getAttribute("data-report-title") || "ce report";
+
+        if (!canCurrentUserManageReports()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous restaurer ce report ?\n\n" +
+          reportTitle + "\n\n" +
+          "Il redeviendra visible publiquement."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Restauration...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("reports")
+            .update({ status: "published" })
+            .eq("id", reportId);
+
+          if (error) throw error;
+
+          openedReportId = reportId;
+          await chargerReportsSupabase(false);
+          await chargerReportsMasquesAdmin();
+          alert("Report restauré avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-restore-report"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+  }
+
+  async function chargerReportsMasquesAdmin() {
+    const section = ensureAdminHiddenReportsSection();
+
+    if (!canCurrentUserManageReports()) {
+      hiddenReports = [];
+      if (section) section.style.display = "none";
+      return;
+    }
+
+    if (section) {
+      section.style.display = "block";
+      if (adminHiddenReportsEmpty) {
+        adminHiddenReportsEmpty.style.display = "block";
+        adminHiddenReportsEmpty.textContent = "Chargement des reports masqués...";
+      }
+      if (adminHiddenReportsList) adminHiddenReportsList.innerHTML = "";
+    }
+
+    const { data, error } = await supabaseClient
+      .from("reports")
+      .select(`
+        id,
+        title,
+        train,
+        operator,
+        departure_station,
+        arrival_station,
+        travel_date,
+        status,
+        created_at,
+        profiles (
+          username,
+          role,
+          avatar_url
+        )
+      `)
+      .eq("status", "hidden")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      if (adminHiddenReportsEmpty) {
+        adminHiddenReportsEmpty.style.display = "block";
+        adminHiddenReportsEmpty.textContent = "Erreur chargement reports masqués : " + getFriendlySupabaseError(error, "read");
+      }
+      return;
+    }
+
+    hiddenReports = data || [];
+    afficherReportsMasquesAdmin();
+  }
+
   function afficherReportsSupabase() {
     reportsList.innerHTML = "";
 
@@ -1316,6 +1495,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
           openedReportId = null;
           await chargerReportsSupabase(false);
+          await chargerReportsMasquesAdmin();
           alert("Report masqué avec succès.");
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-hide-report"));
