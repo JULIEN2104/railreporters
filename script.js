@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + modération admin restaurer report.
+     Version V2 beta : Auth + reports Supabase + modération admin restaurer commentaire.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -22,11 +22,15 @@ document.addEventListener("DOMContentLoaded", function () {
   let currentProfile = null;
   let reports = [];
   let hiddenReports = [];
+  let hiddenComments = [];
   let openedReportId = null;
   let searchQuery = "";
   let adminHiddenReportsSection = null;
   let adminHiddenReportsList = null;
   let adminHiddenReportsEmpty = null;
+  let adminHiddenCommentsSection = null;
+  let adminHiddenCommentsList = null;
+  let adminHiddenCommentsEmpty = null;
 
   if (!window.supabase) {
     console.error("Supabase n'est pas chargé.");
@@ -152,6 +156,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (context === "admin-hide-comment") {
         return "Impossible de masquer ce commentaire. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
+      if (context === "admin-restore-comment") {
+        return "Impossible de restaurer ce commentaire. Cette action est réservée à l’administrateur RailReporters.";
       }
 
       return "Cette action n’est pas autorisée avec votre compte.";
@@ -496,8 +504,12 @@ document.addEventListener("DOMContentLoaded", function () {
       badge.textContent = "Non connecté";
       loginButton.textContent = "Se connecter";
       hiddenReports = [];
+      hiddenComments = [];
       if (adminHiddenReportsSection) {
         adminHiddenReportsSection.style.display = "none";
+      }
+      if (adminHiddenCommentsSection) {
+        adminHiddenCommentsSection.style.display = "none";
       }
       return;
     }
@@ -1033,6 +1045,9 @@ document.addEventListener("DOMContentLoaded", function () {
       chargerReportsMasquesAdmin().catch(function (hiddenError) {
         console.warn("Erreur chargement reports masqués admin", hiddenError);
       });
+      chargerCommentairesMasquesAdmin().catch(function (hiddenCommentError) {
+        console.warn("Erreur chargement commentaires masqués admin", hiddenCommentError);
+      });
     } catch (error) {
       emptyState.style.display = "block";
       emptyState.textContent = "Erreur Supabase : " + getFriendlySupabaseError(error, "read");
@@ -1367,6 +1382,196 @@ document.addEventListener("DOMContentLoaded", function () {
     afficherReportsMasquesAdmin();
   }
 
+
+  function ensureAdminHiddenCommentsSection() {
+    if (adminHiddenCommentsSection) return adminHiddenCommentsSection;
+
+    const reportsSection = document.getElementById("reports");
+    if (!reportsSection || !reportsSection.parentNode) return null;
+
+    const anchor = adminHiddenReportsSection || ensureAdminHiddenReportsSection() || reportsSection;
+
+    adminHiddenCommentsSection = document.createElement("section");
+    adminHiddenCommentsSection.id = "admin-hidden-comments-section";
+    adminHiddenCommentsSection.className = "content-section admin-hidden-comments-section";
+    adminHiddenCommentsSection.style.display = "none";
+    adminHiddenCommentsSection.innerHTML = `
+      <div class="section-header">
+        <h2>Espace admin — Commentaires masqués</h2>
+        <p>Liste réservée à l’administrateur pour restaurer les commentaires passés en hidden.</p>
+      </div>
+      <p id="admin-hidden-comments-empty" class="empty-state">Aucun commentaire masqué pour le moment.</p>
+      <div id="admin-hidden-comments-list" class="admin-hidden-comments-list"></div>
+    `;
+
+    anchor.parentNode.insertBefore(adminHiddenCommentsSection, anchor.nextSibling);
+
+    adminHiddenCommentsList = adminHiddenCommentsSection.querySelector("#admin-hidden-comments-list");
+    adminHiddenCommentsEmpty = adminHiddenCommentsSection.querySelector("#admin-hidden-comments-empty");
+
+    return adminHiddenCommentsSection;
+  }
+
+  function creerAdminHiddenCommentCardHtml(comment) {
+    const report = comment.reports || {};
+    const author = comment.profiles || {};
+    const extrait = String(comment.content || "").length > 260
+      ? String(comment.content || "").slice(0, 260) + "..."
+      : String(comment.content || "");
+
+    return `
+      <article class="admin-hidden-comment-card">
+        <div>
+          <span class="admin-hidden-comment-status">hidden</span>
+          <h3>Commentaire masqué</h3>
+          <p class="author-line">Par ${escapeHtml(getAuthorLabel(author))}</p>
+          <p class="admin-hidden-comment-content">“${escapeHtml(extrait)}”</p>
+          <p>
+            <strong>Report :</strong> ${escapeHtml(report.title || "Report non renseigné")}
+            <br>
+            ${report.departure_station || report.arrival_station
+              ? `${escapeHtml(report.departure_station || "Départ non renseigné")} → ${escapeHtml(report.arrival_station || "Arrivée non renseignée")}`
+              : "Trajet non renseigné"}
+            <br>
+            ${comment.created_at ? "Commentaire du : " + escapeHtml(formaterDate(comment.created_at.slice(0, 10))) : "Date non renseignée"}
+          </p>
+        </div>
+        <button
+          class="admin-restore-comment-button"
+          data-comment-id="${escapeHtml(comment.id)}"
+          data-report-id="${escapeHtml(comment.report_id)}"
+          data-comment-author="${escapeHtml(getAuthorLabel(author))}"
+        >
+          Restaurer ce commentaire
+        </button>
+      </article>`;
+  }
+
+  function afficherCommentairesMasquesAdmin() {
+    const section = ensureAdminHiddenCommentsSection();
+    if (!section || !adminHiddenCommentsList || !adminHiddenCommentsEmpty) return;
+
+    if (!canCurrentUserManageComments()) {
+      section.style.display = "none";
+      return;
+    }
+
+    section.style.display = "block";
+    adminHiddenCommentsList.innerHTML = "";
+
+    if (hiddenComments.length === 0) {
+      adminHiddenCommentsEmpty.style.display = "block";
+      adminHiddenCommentsEmpty.textContent = "Aucun commentaire masqué pour le moment.";
+      return;
+    }
+
+    adminHiddenCommentsEmpty.style.display = "none";
+    adminHiddenCommentsList.innerHTML = hiddenComments.map(creerAdminHiddenCommentCardHtml).join("");
+
+    adminHiddenCommentsList.querySelectorAll(".admin-restore-comment-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const commentId = button.getAttribute("data-comment-id");
+        const reportId = button.getAttribute("data-report-id");
+        const commentAuthor = button.getAttribute("data-comment-author") || "ce commentaire";
+
+        if (!canCurrentUserManageComments()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous restaurer ce commentaire ?\n\n" +
+          "Auteur : " + commentAuthor + "\n\n" +
+          "Il redeviendra visible publiquement sous le report."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Restauration...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("comments")
+            .update({ status: "published" })
+            .eq("id", commentId);
+
+          if (error) throw error;
+
+          openedReportId = reportId;
+          await chargerReportsSupabase(true);
+          await chargerCommentairesMasquesAdmin();
+          alert("Commentaire restauré avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-restore-comment"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+  }
+
+  async function chargerCommentairesMasquesAdmin() {
+    const section = ensureAdminHiddenCommentsSection();
+
+    if (!canCurrentUserManageComments()) {
+      hiddenComments = [];
+      if (section) section.style.display = "none";
+      return;
+    }
+
+    if (section) {
+      section.style.display = "block";
+      if (adminHiddenCommentsEmpty) {
+        adminHiddenCommentsEmpty.style.display = "block";
+        adminHiddenCommentsEmpty.textContent = "Chargement des commentaires masqués...";
+      }
+      if (adminHiddenCommentsList) adminHiddenCommentsList.innerHTML = "";
+    }
+
+    const { data, error } = await supabaseClient
+      .from("comments")
+      .select(`
+        id,
+        report_id,
+        user_id,
+        content,
+        created_at,
+        status,
+        profiles (
+          username,
+          role,
+          avatar_url
+        ),
+        reports (
+          id,
+          title,
+          train,
+          operator,
+          departure_station,
+          arrival_station,
+          travel_date,
+          status
+        )
+      `)
+      .eq("status", "hidden")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      if (adminHiddenCommentsEmpty) {
+        adminHiddenCommentsEmpty.style.display = "block";
+        adminHiddenCommentsEmpty.textContent = "Erreur chargement commentaires masqués : " + getFriendlySupabaseError(error, "read");
+      }
+      return;
+    }
+
+    hiddenComments = data || [];
+    afficherCommentairesMasquesAdmin();
+  }
+
+
   function afficherReportsSupabase() {
     reportsList.innerHTML = "";
 
@@ -1538,6 +1743,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
           openedReportId = reportId;
           await chargerReportsSupabase(true);
+          await chargerCommentairesMasquesAdmin();
           alert("Commentaire masqué avec succès.");
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-hide-comment"));

@@ -1507,3 +1507,105 @@ body {
     width: 100%;
   }
 }
+/* RESTAURATION ADMIN COMMENTAIRES MASQUÉS */
+
+.admin-hidden-comments-section {
+  display: none;
+  margin-top: 24px;
+}
+
+.admin-hidden-comments-section .section-header h2::after {
+  background: linear-gradient(90deg, #16a34a, #8b5cf6) !important;
+}
+
+.admin-hidden-comments-list {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-hidden-comment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(139, 92, 246, 0.10), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+}
+
+.admin-hidden-comment-card h3 {
+  margin: 8px 0 6px;
+  color: #111827;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+
+.admin-hidden-comment-card p {
+  margin: 6px 0 0;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.admin-hidden-comment-content {
+  max-width: 780px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  color: #334155 !important;
+  font-style: italic;
+}
+
+.admin-hidden-comment-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.admin-restore-comment-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #8b5cf6);
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(22, 163, 74, 0.20);
+}
+
+.admin-restore-comment-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.96;
+}
+
+.admin-restore-comment-button:disabled {
+  opacity: 0.60;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 760px) {
+  .admin-hidden-comment-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-restore-comment-button {
+    width: 100%;
+  }
+}
