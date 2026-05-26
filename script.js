@@ -28,6 +28,9 @@ document.addEventListener("DOMContentLoaded", function () {
   let adminHiddenReportsSection = null;
   let adminHiddenReportsList = null;
   let adminHiddenReportsEmpty = null;
+  let adminDashboardSection = null;
+  let adminDashboardSummary = null;
+  let adminDashboardGrid = null;
   let adminHiddenCommentsSection = null;
   let adminHiddenCommentsList = null;
   let adminHiddenCommentsEmpty = null;
@@ -156,6 +159,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (context === "admin-hide-comment") {
         return "Impossible de masquer ce commentaire. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
+      if (context === "admin-restore-report") {
+        return "Impossible de restaurer ce report. Cette action est réservée à l’administrateur RailReporters.";
       }
 
       if (context === "admin-restore-comment") {
@@ -510,6 +517,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       if (adminHiddenCommentsSection) {
         adminHiddenCommentsSection.style.display = "none";
+      }
+      if (adminDashboardSection) {
+        adminDashboardSection.style.display = "none";
       }
       return;
     }
@@ -1200,6 +1210,79 @@ document.addEventListener("DOMContentLoaded", function () {
     return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
   }
 
+
+  function ensureAdminDashboardSection() {
+    if (adminDashboardSection) return adminDashboardSection;
+
+    const reportsSection = document.getElementById("reports");
+    if (!reportsSection || !reportsSection.parentNode) return null;
+
+    adminDashboardSection = document.createElement("section");
+    adminDashboardSection.id = "admin-dashboard-section";
+    adminDashboardSection.className = "content-section admin-dashboard-section";
+    adminDashboardSection.style.display = "none";
+    adminDashboardSection.innerHTML = `
+      <div class="admin-dashboard-hero">
+        <div>
+          <span class="admin-dashboard-kicker">Administration</span>
+          <h2>Espace admin RailReporters</h2>
+          <p>Centralise les contenus masqués et les actions de modération déjà validées.</p>
+        </div>
+        <div id="admin-dashboard-summary" class="admin-dashboard-summary">
+          <div class="admin-dashboard-stat">
+            <strong>0</strong>
+            <span>reports masqués</span>
+          </div>
+          <div class="admin-dashboard-stat">
+            <strong>0</strong>
+            <span>commentaires masqués</span>
+          </div>
+        </div>
+      </div>
+      <div class="admin-dashboard-note">
+        Les actions de modération restent protégées côté Supabase par RLS. Les contenus sont masqués, pas supprimés définitivement.
+      </div>
+      <div id="admin-dashboard-grid" class="admin-dashboard-grid"></div>
+    `;
+
+    reportsSection.parentNode.insertBefore(adminDashboardSection, reportsSection.nextSibling);
+
+    adminDashboardSummary = adminDashboardSection.querySelector("#admin-dashboard-summary");
+    adminDashboardGrid = adminDashboardSection.querySelector("#admin-dashboard-grid");
+
+    return adminDashboardSection;
+  }
+
+  function updateAdminDashboardSummary() {
+    if (!adminDashboardSummary) return;
+
+    adminDashboardSummary.innerHTML = `
+      <div class="admin-dashboard-stat">
+        <strong>${hiddenReports.length}</strong>
+        <span>${hiddenReports.length > 1 ? "reports masqués" : "report masqué"}</span>
+      </div>
+      <div class="admin-dashboard-stat">
+        <strong>${hiddenComments.length}</strong>
+        <span>${hiddenComments.length > 1 ? "commentaires masqués" : "commentaire masqué"}</span>
+      </div>
+    `;
+  }
+
+  function updateAdminDashboardVisibility() {
+    const section = ensureAdminDashboardSection();
+    if (!section) return;
+
+    const isAdminLike = canCurrentUserManageReports() || canCurrentUserManageComments();
+    section.style.display = isAdminLike ? "block" : "none";
+
+    if (!isAdminLike) {
+      if (adminHiddenReportsSection) adminHiddenReportsSection.style.display = "none";
+      if (adminHiddenCommentsSection) adminHiddenCommentsSection.style.display = "none";
+    }
+
+    updateAdminDashboardSummary();
+  }
+
   function creerAdminReportActionsHtml(report) {
     if (!canCurrentUserManageReports()) return "";
 
@@ -1214,26 +1297,30 @@ document.addEventListener("DOMContentLoaded", function () {
       </div>`;
   }
 
+  
   function ensureAdminHiddenReportsSection() {
     if (adminHiddenReportsSection) return adminHiddenReportsSection;
 
-    const reportsSection = document.getElementById("reports");
-    if (!reportsSection || !reportsSection.parentNode) return null;
+    const dashboard = ensureAdminDashboardSection();
+    if (!dashboard || !adminDashboardGrid) return null;
 
     adminHiddenReportsSection = document.createElement("section");
     adminHiddenReportsSection.id = "admin-hidden-reports-section";
-    adminHiddenReportsSection.className = "content-section admin-hidden-reports-section";
+    adminHiddenReportsSection.className = "admin-dashboard-panel admin-hidden-reports-section";
     adminHiddenReportsSection.style.display = "none";
     adminHiddenReportsSection.innerHTML = `
-      <div class="section-header">
-        <h2>Espace admin — Reports masqués</h2>
-        <p>Liste réservée à l’administrateur pour restaurer les reports passés en hidden.</p>
+      <div class="admin-panel-header">
+        <div>
+          <span class="admin-panel-kicker">Reports</span>
+          <h3>Reports masqués</h3>
+        </div>
+        <p>Restaurer un report passé en hidden.</p>
       </div>
       <p id="admin-hidden-reports-empty" class="empty-state">Aucun report masqué pour le moment.</p>
       <div id="admin-hidden-reports-list" class="admin-hidden-reports-list"></div>
     `;
 
-    reportsSection.parentNode.insertBefore(adminHiddenReportsSection, reportsSection.nextSibling);
+    adminDashboardGrid.appendChild(adminHiddenReportsSection);
 
     adminHiddenReportsList = adminHiddenReportsSection.querySelector("#admin-hidden-reports-list");
     adminHiddenReportsEmpty = adminHiddenReportsSection.querySelector("#admin-hidden-reports-empty");
@@ -1272,9 +1359,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!canCurrentUserManageReports()) {
       section.style.display = "none";
+      updateAdminDashboardVisibility();
       return;
     }
 
+    updateAdminDashboardVisibility();
     section.style.display = "block";
     adminHiddenReportsList.innerHTML = "";
 
@@ -1336,6 +1425,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!canCurrentUserManageReports()) {
       hiddenReports = [];
       if (section) section.style.display = "none";
+      updateAdminDashboardVisibility();
       return;
     }
 
@@ -1379,32 +1469,35 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     hiddenReports = data || [];
+    updateAdminDashboardSummary();
     afficherReportsMasquesAdmin();
   }
 
 
+  
   function ensureAdminHiddenCommentsSection() {
     if (adminHiddenCommentsSection) return adminHiddenCommentsSection;
 
-    const reportsSection = document.getElementById("reports");
-    if (!reportsSection || !reportsSection.parentNode) return null;
-
-    const anchor = adminHiddenReportsSection || ensureAdminHiddenReportsSection() || reportsSection;
+    const dashboard = ensureAdminDashboardSection();
+    if (!dashboard || !adminDashboardGrid) return null;
 
     adminHiddenCommentsSection = document.createElement("section");
     adminHiddenCommentsSection.id = "admin-hidden-comments-section";
-    adminHiddenCommentsSection.className = "content-section admin-hidden-comments-section";
+    adminHiddenCommentsSection.className = "admin-dashboard-panel admin-hidden-comments-section";
     adminHiddenCommentsSection.style.display = "none";
     adminHiddenCommentsSection.innerHTML = `
-      <div class="section-header">
-        <h2>Espace admin — Commentaires masqués</h2>
-        <p>Liste réservée à l’administrateur pour restaurer les commentaires passés en hidden.</p>
+      <div class="admin-panel-header">
+        <div>
+          <span class="admin-panel-kicker">Commentaires</span>
+          <h3>Commentaires masqués</h3>
+        </div>
+        <p>Restaurer un commentaire passé en hidden.</p>
       </div>
       <p id="admin-hidden-comments-empty" class="empty-state">Aucun commentaire masqué pour le moment.</p>
       <div id="admin-hidden-comments-list" class="admin-hidden-comments-list"></div>
     `;
 
-    anchor.parentNode.insertBefore(adminHiddenCommentsSection, anchor.nextSibling);
+    adminDashboardGrid.appendChild(adminHiddenCommentsSection);
 
     adminHiddenCommentsList = adminHiddenCommentsSection.querySelector("#admin-hidden-comments-list");
     adminHiddenCommentsEmpty = adminHiddenCommentsSection.querySelector("#admin-hidden-comments-empty");
@@ -1453,9 +1546,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!canCurrentUserManageComments()) {
       section.style.display = "none";
+      updateAdminDashboardVisibility();
       return;
     }
 
+    updateAdminDashboardVisibility();
     section.style.display = "block";
     adminHiddenCommentsList.innerHTML = "";
 
@@ -1518,6 +1613,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!canCurrentUserManageComments()) {
       hiddenComments = [];
       if (section) section.style.display = "none";
+      updateAdminDashboardVisibility();
       return;
     }
 
@@ -1568,6 +1664,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     hiddenComments = data || [];
+    updateAdminDashboardSummary();
     afficherCommentairesMasquesAdmin();
   }
 
