@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + modération admin restaurer commentaire.
+     Version V2 beta : Auth + reports Supabase + espace admin utilisateurs.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let reports = [];
   let hiddenReports = [];
   let hiddenComments = [];
+  let adminUsers = [];
   let openedReportId = null;
   let searchQuery = "";
   let adminHiddenReportsSection = null;
@@ -34,6 +35,9 @@ document.addEventListener("DOMContentLoaded", function () {
   let adminHiddenCommentsSection = null;
   let adminHiddenCommentsList = null;
   let adminHiddenCommentsEmpty = null;
+  let adminUsersSection = null;
+  let adminUsersList = null;
+  let adminUsersEmpty = null;
 
   if (!window.supabase) {
     console.error("Supabase n'est pas chargé.");
@@ -167,6 +171,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (context === "admin-restore-comment") {
         return "Impossible de restaurer ce commentaire. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
+      if (context === "admin-users") {
+        return "Impossible de modifier cet utilisateur. Cette action est réservée à l’administrateur RailReporters.";
       }
 
       return "Cette action n’est pas autorisée avec votre compte.";
@@ -512,11 +520,15 @@ document.addEventListener("DOMContentLoaded", function () {
       loginButton.textContent = "Se connecter";
       hiddenReports = [];
       hiddenComments = [];
+      adminUsers = [];
       if (adminHiddenReportsSection) {
         adminHiddenReportsSection.style.display = "none";
       }
       if (adminHiddenCommentsSection) {
         adminHiddenCommentsSection.style.display = "none";
+      }
+      if (adminUsersSection) {
+        adminUsersSection.style.display = "none";
       }
       if (adminDashboardSection) {
         adminDashboardSection.style.display = "none";
@@ -1058,6 +1070,9 @@ document.addEventListener("DOMContentLoaded", function () {
       chargerCommentairesMasquesAdmin().catch(function (hiddenCommentError) {
         console.warn("Erreur chargement commentaires masqués admin", hiddenCommentError);
       });
+      chargerUtilisateursAdmin().catch(function (usersError) {
+        console.warn("Erreur chargement utilisateurs admin", usersError);
+      });
     } catch (error) {
       emptyState.style.display = "block";
       emptyState.textContent = "Erreur Supabase : " + getFriendlySupabaseError(error, "read");
@@ -1210,6 +1225,11 @@ document.addEventListener("DOMContentLoaded", function () {
     return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
   }
 
+  function canCurrentUserManageUsers() {
+    const role = currentProfile && currentProfile.role;
+    return Boolean(currentUser && !isCurrentUserBanned() && role === "admin");
+  }
+
 
   function ensureAdminDashboardSection() {
     if (adminDashboardSection) return adminDashboardSection;
@@ -1236,6 +1256,10 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="admin-dashboard-stat">
             <strong>0</strong>
             <span>commentaires masqués</span>
+          </div>
+          <div class="admin-dashboard-stat">
+            <strong>0</strong>
+            <span>utilisateurs</span>
           </div>
         </div>
       </div>
@@ -1265,6 +1289,10 @@ document.addEventListener("DOMContentLoaded", function () {
         <strong>${hiddenComments.length}</strong>
         <span>${hiddenComments.length > 1 ? "commentaires masqués" : "commentaire masqué"}</span>
       </div>
+      <div class="admin-dashboard-stat">
+        <strong>${adminUsers.length}</strong>
+        <span>${adminUsers.length > 1 ? "utilisateurs" : "utilisateur"}</span>
+      </div>
     `;
   }
 
@@ -1272,12 +1300,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const section = ensureAdminDashboardSection();
     if (!section) return;
 
-    const isAdminLike = canCurrentUserManageReports() || canCurrentUserManageComments();
+    const isAdminLike = canCurrentUserManageReports() || canCurrentUserManageComments() || canCurrentUserManageUsers();
     section.style.display = isAdminLike ? "block" : "none";
 
     if (!isAdminLike) {
       if (adminHiddenReportsSection) adminHiddenReportsSection.style.display = "none";
       if (adminHiddenCommentsSection) adminHiddenCommentsSection.style.display = "none";
+      if (adminUsersSection) adminUsersSection.style.display = "none";
     }
 
     updateAdminDashboardSummary();
@@ -1666,6 +1695,235 @@ document.addEventListener("DOMContentLoaded", function () {
     hiddenComments = data || [];
     updateAdminDashboardSummary();
     afficherCommentairesMasquesAdmin();
+  }
+
+
+
+  function ensureAdminUsersSection() {
+    if (adminUsersSection) return adminUsersSection;
+
+    const dashboard = ensureAdminDashboardSection();
+    if (!dashboard || !adminDashboardGrid) return null;
+
+    adminUsersSection = document.createElement("section");
+    adminUsersSection.id = "admin-users-section";
+    adminUsersSection.className = "admin-dashboard-panel admin-users-section";
+    adminUsersSection.style.display = "none";
+    adminUsersSection.innerHTML = `
+      <div class="admin-panel-header">
+        <div>
+          <span class="admin-panel-kicker">Utilisateurs</span>
+          <h3>Utilisateurs</h3>
+        </div>
+        <p>Voir les profils et bannir ou débannir un compte membre.</p>
+      </div>
+      <p id="admin-users-empty" class="empty-state">Aucun utilisateur à afficher pour le moment.</p>
+      <div id="admin-users-list" class="admin-users-list"></div>
+    `;
+
+    adminDashboardGrid.appendChild(adminUsersSection);
+
+    adminUsersList = adminUsersSection.querySelector("#admin-users-list");
+    adminUsersEmpty = adminUsersSection.querySelector("#admin-users-empty");
+
+    return adminUsersSection;
+  }
+
+  function getUserStatusLabel(profile) {
+    return profile && profile.is_banned ? "Banni" : "Actif";
+  }
+
+  function creerAdminUserCardHtml(profile) {
+    const username = profile.username || "Utilisateur";
+    const role = profile.role || "member";
+    const isBanned = profile.is_banned === true;
+    const isCurrentAdmin = currentUser && profile.id === currentUser.id;
+    const isAdminRole = role === "admin";
+    const createdAt = profile.created_at ? formaterDate(String(profile.created_at).slice(0, 10)) : "Date inconnue";
+
+    let actionHtml = "";
+
+    if (isCurrentAdmin) {
+      actionHtml = `<p class="admin-user-protected">Compte admin connecté — aucune action rapide.</p>`;
+    } else if (isAdminRole) {
+      actionHtml = `<p class="admin-user-protected">Compte admin protégé.</p>`;
+    } else if (isBanned) {
+      actionHtml = `
+        <button
+          class="admin-user-action-button admin-unban-user-button"
+          data-user-id="${escapeHtml(profile.id)}"
+          data-username="${escapeHtml(username)}"
+        >
+          Débannir
+        </button>`;
+    } else {
+      actionHtml = `
+        <button
+          class="admin-user-action-button admin-ban-user-button"
+          data-user-id="${escapeHtml(profile.id)}"
+          data-username="${escapeHtml(username)}"
+        >
+          Bannir
+        </button>`;
+    }
+
+    return `
+      <article class="admin-user-card ${isBanned ? "banned" : "active"}">
+        <div>
+          <span class="admin-user-status ${isBanned ? "banned" : "active"}">${escapeHtml(getUserStatusLabel(profile))}</span>
+          <h3>${escapeHtml(username)}</h3>
+          <p>
+            <strong>Rôle :</strong> ${escapeHtml(getRoleLabel(role))}
+            <br>
+            <strong>Créé le :</strong> ${escapeHtml(createdAt)}
+          </p>
+        </div>
+        <div class="admin-user-actions">
+          ${actionHtml}
+        </div>
+      </article>`;
+  }
+
+  function afficherUtilisateursAdmin() {
+    const section = ensureAdminUsersSection();
+    if (!section || !adminUsersList || !adminUsersEmpty) return;
+
+    if (!canCurrentUserManageUsers()) {
+      adminUsers = [];
+      section.style.display = "none";
+      updateAdminDashboardVisibility();
+      return;
+    }
+
+    updateAdminDashboardVisibility();
+    section.style.display = "block";
+    adminUsersList.innerHTML = "";
+
+    if (adminUsers.length === 0) {
+      adminUsersEmpty.style.display = "block";
+      adminUsersEmpty.textContent = "Aucun utilisateur à afficher pour le moment.";
+      return;
+    }
+
+    adminUsersEmpty.style.display = "none";
+    adminUsersList.innerHTML = adminUsers.map(creerAdminUserCardHtml).join("");
+
+    adminUsersList.querySelectorAll(".admin-ban-user-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const userId = button.getAttribute("data-user-id");
+        const username = button.getAttribute("data-username") || "cet utilisateur";
+
+        if (!canCurrentUserManageUsers()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous vraiment bannir cet utilisateur ?\n\n" +
+          username + "\n\n" +
+          "Il ne pourra plus publier, commenter ou envoyer de photo."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Bannissement...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("profiles")
+            .update({ is_banned: true })
+            .eq("id", userId);
+
+          if (error) throw error;
+
+          await chargerUtilisateursAdmin();
+          alert("Utilisateur banni avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-users"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+
+    adminUsersList.querySelectorAll(".admin-unban-user-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const userId = button.getAttribute("data-user-id");
+        const username = button.getAttribute("data-username") || "cet utilisateur";
+
+        if (!canCurrentUserManageUsers()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Voulez-vous vraiment débannir cet utilisateur ?\n\n" +
+          username + "\n\n" +
+          "Il pourra à nouveau publier, commenter et envoyer des photos."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Débannissement...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("profiles")
+            .update({ is_banned: false })
+            .eq("id", userId);
+
+          if (error) throw error;
+
+          await chargerUtilisateursAdmin();
+          alert("Utilisateur débanni avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-users"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+  }
+
+  async function chargerUtilisateursAdmin() {
+    const section = ensureAdminUsersSection();
+
+    if (!canCurrentUserManageUsers()) {
+      adminUsers = [];
+      if (section) section.style.display = "none";
+      updateAdminDashboardVisibility();
+      return;
+    }
+
+    if (section) {
+      section.style.display = "block";
+      if (adminUsersEmpty) {
+        adminUsersEmpty.style.display = "block";
+        adminUsersEmpty.textContent = "Chargement des utilisateurs...";
+      }
+      if (adminUsersList) adminUsersList.innerHTML = "";
+    }
+
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .select("id, username, role, is_banned, created_at, updated_at")
+      .order("username", { ascending: true });
+
+    if (error) {
+      if (adminUsersEmpty) {
+        adminUsersEmpty.style.display = "block";
+        adminUsersEmpty.textContent = "Erreur chargement utilisateurs : " + getFriendlySupabaseError(error, "read");
+      }
+      return;
+    }
+
+    adminUsers = data || [];
+    updateAdminDashboardSummary();
+    afficherUtilisateursAdmin();
   }
 
 
