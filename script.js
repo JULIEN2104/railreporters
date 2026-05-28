@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + espace admin utilisateurs.
+     Version V2 beta : Auth + reports Supabase + espace admin + signalement report/commentaire.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let hiddenReports = [];
   let hiddenComments = [];
   let adminUsers = [];
+  let moderationReports = [];
   let openedReportId = null;
   let searchQuery = "";
   let adminHiddenReportsSection = null;
@@ -38,6 +39,9 @@ document.addEventListener("DOMContentLoaded", function () {
   let adminUsersSection = null;
   let adminUsersList = null;
   let adminUsersEmpty = null;
+  let adminModerationReportsSection = null;
+  let adminModerationReportsList = null;
+  let adminModerationReportsEmpty = null;
 
   if (!window.supabase) {
     console.error("Supabase n'est pas chargé.");
@@ -153,6 +157,10 @@ document.addEventListener("DOMContentLoaded", function () {
         return "Le commentaire n’a pas pu être publié. Cette action n’est pas autorisée avec ce compte.";
       }
 
+      if (context === "signal") {
+        return "Le signalement n’a pas pu être envoyé. Vérifiez que vous êtes connecté et que votre compte est autorisé à signaler un contenu.";
+      }
+
       if (context === "upload") {
         return "L’envoi de la photo n’a pas été autorisé. Vérifiez que vous êtes connecté et que votre compte est autorisé à publier.";
       }
@@ -175,6 +183,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (context === "admin-users") {
         return "Impossible de modifier cet utilisateur. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
+      if (context === "admin-moderation-reports") {
+        return "Impossible de modifier ce signalement. Cette action est réservée à l’administrateur RailReporters.";
       }
 
       return "Cette action n’est pas autorisée avec votre compte.";
@@ -521,6 +533,7 @@ document.addEventListener("DOMContentLoaded", function () {
       hiddenReports = [];
       hiddenComments = [];
       adminUsers = [];
+      moderationReports = [];
       if (adminHiddenReportsSection) {
         adminHiddenReportsSection.style.display = "none";
       }
@@ -529,6 +542,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       if (adminUsersSection) {
         adminUsersSection.style.display = "none";
+      }
+      if (adminModerationReportsSection) {
+        adminModerationReportsSection.style.display = "none";
       }
       if (adminDashboardSection) {
         adminDashboardSection.style.display = "none";
@@ -1073,6 +1089,9 @@ document.addEventListener("DOMContentLoaded", function () {
       chargerUtilisateursAdmin().catch(function (usersError) {
         console.warn("Erreur chargement utilisateurs admin", usersError);
       });
+      chargerSignalementsAdmin().catch(function (moderationError) {
+        console.warn("Erreur chargement signalements admin", moderationError);
+      });
     } catch (error) {
       emptyState.style.display = "block";
       emptyState.textContent = "Erreur Supabase : " + getFriendlySupabaseError(error, "read");
@@ -1175,6 +1194,87 @@ document.addEventListener("DOMContentLoaded", function () {
     }).join("");
   }
 
+  function creerSignalementReportHtml(report) {
+    if (!currentUser) {
+      return `
+        <div class="report-section report-signal-section">
+          <h4>Signaler ce report</h4>
+          <p>Vous devez être connecté pour signaler un contenu à l’équipe RailReporters.</p>
+          <button type="button" class="signal-login-button" data-report-id="${escapeHtml(report.id)}">
+            Se connecter pour signaler
+          </button>
+        </div>`;
+    }
+
+    if (isCurrentUserBanned()) {
+      return `
+        <div class="report-section report-signal-section">
+          <h4>Signaler ce report</h4>
+          <p>Votre compte est actuellement bloqué. Vous ne pouvez pas envoyer de signalement.</p>
+        </div>`;
+    }
+
+    return `
+      <div class="report-section report-signal-section">
+        <h4>Signaler ce report</h4>
+        <p>Utilisez ce formulaire uniquement pour signaler un contenu problématique. Le report ne sera pas supprimé automatiquement : l’administrateur vérifiera le signalement.</p>
+        <form class="report-signal-form" data-report-id="${escapeHtml(report.id)}" data-report-title="${escapeHtml(report.title)}">
+          <label>Raison du signalement</label>
+          <select class="signal-reason" required>
+            <option value="">Choisir une raison</option>
+            <option value="spam">Spam</option>
+            <option value="insulte">Insulte ou manque de respect</option>
+            <option value="contenu_hors_sujet">Contenu hors sujet</option>
+            <option value="contenu_inadapte">Contenu inadapté</option>
+            <option value="autre">Autre raison</option>
+          </select>
+          <label>Détails optionnels</label>
+          <textarea class="signal-details" rows="3" placeholder="Ajoutez une précision si nécessaire..."></textarea>
+          <button type="submit">Envoyer le signalement</button>
+          <p class="signal-status" aria-live="polite"></p>
+        </form>
+      </div>`;
+  }
+
+
+  function creerSignalementCommentaireHtml(report, comment) {
+    if (!currentUser) {
+      return `
+        <div class="comment-signal-block">
+          <button type="button" class="signal-login-button comment-signal-login-button" data-comment-id="${escapeHtml(comment.id)}">
+            Se connecter pour signaler ce commentaire
+          </button>
+        </div>`;
+    }
+
+    if (isCurrentUserBanned()) {
+      return `
+        <div class="comment-signal-block">
+          <p class="comment-signal-message">Votre compte est actuellement bloqué. Vous ne pouvez pas envoyer de signalement.</p>
+        </div>`;
+    }
+
+    return `
+      <details class="comment-signal-details">
+        <summary>Signaler ce commentaire</summary>
+        <form class="comment-signal-form" data-comment-id="${escapeHtml(comment.id)}" data-report-id="${escapeHtml(report.id)}" data-comment-author="${escapeHtml(getAuthorLabel(comment.profiles))}">
+          <label>Raison du signalement</label>
+          <select class="signal-reason" required>
+            <option value="">Choisir une raison</option>
+            <option value="spam">Spam</option>
+            <option value="insulte">Insulte ou manque de respect</option>
+            <option value="contenu_hors_sujet">Contenu hors sujet</option>
+            <option value="contenu_inadapte">Contenu inadapté</option>
+            <option value="autre">Autre raison</option>
+          </select>
+          <label>Détails optionnels</label>
+          <textarea class="signal-details" rows="3" placeholder="Ajoutez une précision si nécessaire..."></textarea>
+          <button type="submit">Envoyer le signalement</button>
+          <p class="signal-status" aria-live="polite"></p>
+        </form>
+      </details>`;
+  }
+
   function creerCommentairesHtml(report) {
     const comments = report.comments || [];
     const listHtml = comments.length === 0
@@ -1192,6 +1292,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 </button>
               </div>`
             : "";
+          const signalHtml = creerSignalementCommentaireHtml(report, comment);
 
           return `
             <div class="comment">
@@ -1199,6 +1300,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <p>${escapeHtml(comment.content)}</p>
               <span>${comment.created_at ? escapeHtml(formaterDate(comment.created_at.slice(0, 10))) : ""}</span>
               ${adminButton}
+              ${signalHtml}
             </div>`;
         }).join("");
 
@@ -1228,6 +1330,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function canCurrentUserManageUsers() {
     const role = currentProfile && currentProfile.role;
     return Boolean(currentUser && !isCurrentUserBanned() && role === "admin");
+  }
+
+  function canCurrentUserManageModerationReports() {
+    const role = currentProfile && currentProfile.role;
+    return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
   }
 
 
@@ -1261,6 +1368,10 @@ document.addEventListener("DOMContentLoaded", function () {
             <strong>0</strong>
             <span>utilisateurs</span>
           </div>
+          <div class="admin-dashboard-stat">
+            <strong>0</strong>
+            <span>signalements</span>
+          </div>
         </div>
       </div>
       <div class="admin-dashboard-note">
@@ -1280,6 +1391,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateAdminDashboardSummary() {
     if (!adminDashboardSummary) return;
 
+    const pendingModerationReports = moderationReports.filter(function (item) {
+      return item.status === "pending";
+    }).length;
+
     adminDashboardSummary.innerHTML = `
       <div class="admin-dashboard-stat">
         <strong>${hiddenReports.length}</strong>
@@ -1293,6 +1408,10 @@ document.addEventListener("DOMContentLoaded", function () {
         <strong>${adminUsers.length}</strong>
         <span>${adminUsers.length > 1 ? "utilisateurs" : "utilisateur"}</span>
       </div>
+      <div class="admin-dashboard-stat">
+        <strong>${pendingModerationReports}</strong>
+        <span>${pendingModerationReports > 1 ? "signalements en attente" : "signalement en attente"}</span>
+      </div>
     `;
   }
 
@@ -1300,13 +1419,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const section = ensureAdminDashboardSection();
     if (!section) return;
 
-    const isAdminLike = canCurrentUserManageReports() || canCurrentUserManageComments() || canCurrentUserManageUsers();
+    const isAdminLike = canCurrentUserManageReports() || canCurrentUserManageComments() || canCurrentUserManageUsers() || canCurrentUserManageModerationReports();
     section.style.display = isAdminLike ? "block" : "none";
 
     if (!isAdminLike) {
       if (adminHiddenReportsSection) adminHiddenReportsSection.style.display = "none";
       if (adminHiddenCommentsSection) adminHiddenCommentsSection.style.display = "none";
       if (adminUsersSection) adminUsersSection.style.display = "none";
+      if (adminModerationReportsSection) adminModerationReportsSection.style.display = "none";
     }
 
     updateAdminDashboardSummary();
@@ -1699,6 +1819,286 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
+  function getModerationContentTypeLabel(type) {
+    if (type === "report") return "Report";
+    if (type === "comment") return "Commentaire";
+    if (type === "photo") return "Photo";
+    if (type === "profile") return "Profil";
+    return type || "Contenu";
+  }
+
+  function getModerationStatusLabel(status) {
+    if (status === "pending") return "En attente";
+    if (status === "reviewed") return "Examiné";
+    if (status === "rejected") return "Rejeté";
+    if (status === "action_taken") return "Action effectuée";
+    return status || "Statut inconnu";
+  }
+
+  function getModerationReasonLabel(reason) {
+    const labels = {
+      spam: "Spam",
+      insult: "Insulte ou manque de respect",
+      harassment: "Harcèlement",
+      discrimination: "Discrimination",
+      inappropriate: "Contenu inadapté",
+      off_topic: "Contenu hors sujet",
+      personal_info: "Information personnelle",
+      other: "Autre raison"
+    };
+    return labels[reason] || reason || "Raison non renseignée";
+  }
+
+  function getModerationReporterLabel(item) {
+    if (item.reporter_profile) {
+      return getAuthorLabel(item.reporter_profile);
+    }
+    if (item.reported_by) {
+      return "Utilisateur " + String(item.reported_by).slice(0, 8) + "...";
+    }
+    return "Utilisateur inconnu";
+  }
+
+  function getModerationTargetLabel(item) {
+    if (item.content_type === "report") {
+      if (item.target_report) {
+        return item.target_report.title || "Report sans titre";
+      }
+      return "Report " + String(item.content_id || "").slice(0, 8) + "...";
+    }
+
+    if (item.content_type === "comment") {
+      if (item.target_comment) {
+        const excerpt = (item.target_comment.content || "Commentaire").slice(0, 90);
+        const reportTitle = item.target_report ? " — " + item.target_report.title : "";
+        return excerpt + reportTitle;
+      }
+      return "Commentaire " + String(item.content_id || "").slice(0, 8) + "...";
+    }
+
+    return String(item.content_id || "Contenu non identifié");
+  }
+
+  function ensureAdminModerationReportsSection() {
+    if (adminModerationReportsSection) return adminModerationReportsSection;
+
+    const dashboard = ensureAdminDashboardSection();
+    if (!dashboard || !adminDashboardGrid) return null;
+
+    adminModerationReportsSection = document.createElement("section");
+    adminModerationReportsSection.id = "admin-moderation-reports-section";
+    adminModerationReportsSection.className = "admin-dashboard-panel admin-moderation-reports-section";
+    adminModerationReportsSection.style.display = "none";
+    adminModerationReportsSection.innerHTML = `
+      <div class="admin-panel-header">
+        <div>
+          <span class="admin-panel-kicker">Signalements</span>
+          <h3>Signalements</h3>
+        </div>
+        <p>Consulter les signalements et changer leur statut.</p>
+      </div>
+      <p id="admin-moderation-reports-empty" class="empty-state">Aucun signalement pour le moment.</p>
+      <div id="admin-moderation-reports-list" class="admin-moderation-reports-list"></div>
+    `;
+
+    adminDashboardGrid.appendChild(adminModerationReportsSection);
+
+    adminModerationReportsList = adminModerationReportsSection.querySelector("#admin-moderation-reports-list");
+    adminModerationReportsEmpty = adminModerationReportsSection.querySelector("#admin-moderation-reports-empty");
+
+    return adminModerationReportsSection;
+  }
+
+  function creerAdminModerationReportCardHtml(item) {
+    const createdAt = item.created_at ? formaterDate(String(item.created_at).slice(0, 10)) : "Date inconnue";
+    const details = item.details ? `<p class="admin-moderation-details">${escapeHtml(item.details)}</p>` : `<p class="admin-moderation-details muted">Aucun détail complémentaire.</p>`;
+    const status = item.status || "pending";
+
+    return `
+      <article class="admin-moderation-report-card status-${escapeHtml(status)}">
+        <div class="admin-moderation-report-main">
+          <div class="admin-moderation-report-titleline">
+            <span class="admin-moderation-type">${escapeHtml(getModerationContentTypeLabel(item.content_type))}</span>
+            <span class="admin-moderation-status status-${escapeHtml(status)}">${escapeHtml(getModerationStatusLabel(status))}</span>
+          </div>
+          <h3>${escapeHtml(getModerationReasonLabel(item.reason))}</h3>
+          <p>
+            <strong>Contenu :</strong> ${escapeHtml(getModerationTargetLabel(item))}
+            <br>
+            <strong>Signalé par :</strong> ${escapeHtml(getModerationReporterLabel(item))}
+            <br>
+            <strong>Date :</strong> ${escapeHtml(createdAt)}
+          </p>
+          ${details}
+        </div>
+        <div class="admin-moderation-actions">
+          <button class="admin-moderation-status-button" data-report-id="${escapeHtml(item.id)}" data-status="reviewed">Marquer comme examiné</button>
+          <button class="admin-moderation-status-button secondary" data-report-id="${escapeHtml(item.id)}" data-status="rejected">Rejeter</button>
+          <button class="admin-moderation-status-button success" data-report-id="${escapeHtml(item.id)}" data-status="action_taken">Action effectuée</button>
+        </div>
+      </article>`;
+  }
+
+  function afficherSignalementsAdmin() {
+    const section = ensureAdminModerationReportsSection();
+    if (!section || !adminModerationReportsList || !adminModerationReportsEmpty) return;
+
+    if (!canCurrentUserManageModerationReports()) {
+      moderationReports = [];
+      section.style.display = "none";
+      updateAdminDashboardVisibility();
+      return;
+    }
+
+    updateAdminDashboardVisibility();
+    section.style.display = "block";
+    adminModerationReportsList.innerHTML = "";
+
+    if (moderationReports.length === 0) {
+      adminModerationReportsEmpty.style.display = "block";
+      adminModerationReportsEmpty.textContent = "Aucun signalement pour le moment.";
+      return;
+    }
+
+    adminModerationReportsEmpty.style.display = "none";
+    adminModerationReportsList.innerHTML = moderationReports.map(creerAdminModerationReportCardHtml).join("");
+
+    adminModerationReportsList.querySelectorAll(".admin-moderation-status-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const moderationReportId = button.getAttribute("data-report-id");
+        const nextStatus = button.getAttribute("data-status");
+        const label = getModerationStatusLabel(nextStatus);
+
+        if (!canCurrentUserManageModerationReports()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const confirmed = window.confirm("Voulez-vous passer ce signalement en statut : " + label + " ?");
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Mise à jour...";
+
+        try {
+          const { error } = await supabaseClient
+            .from("moderation_reports")
+            .update({
+              status: nextStatus,
+              reviewed_at: new Date().toISOString()
+            })
+            .eq("id", moderationReportId);
+
+          if (error) throw error;
+
+          await chargerSignalementsAdmin();
+          alert("Signalement mis à jour avec succès.");
+        } catch (error) {
+          alert(getFriendlySupabaseError(error, "admin-moderation-reports"));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
+  }
+
+  async function chargerSignalementsAdmin() {
+    const section = ensureAdminModerationReportsSection();
+
+    if (!canCurrentUserManageModerationReports()) {
+      moderationReports = [];
+      if (section) section.style.display = "none";
+      updateAdminDashboardVisibility();
+      return;
+    }
+
+    if (section) {
+      section.style.display = "block";
+      if (adminModerationReportsEmpty) {
+        adminModerationReportsEmpty.style.display = "block";
+        adminModerationReportsEmpty.textContent = "Chargement des signalements...";
+      }
+      if (adminModerationReportsList) adminModerationReportsList.innerHTML = "";
+    }
+
+    const { data, error } = await supabaseClient
+      .from("moderation_reports")
+      .select("id, reported_by, content_type, content_id, reason, details, status, admin_note, created_at, reviewed_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      if (adminModerationReportsEmpty) {
+        adminModerationReportsEmpty.style.display = "block";
+        adminModerationReportsEmpty.textContent = "Erreur chargement signalements : " + getFriendlySupabaseError(error, "read");
+      }
+      return;
+    }
+
+    const rawReports = data || [];
+    const reporterIds = Array.from(new Set(rawReports.map(function (item) { return item.reported_by; }).filter(Boolean)));
+    const reportTargetIds = Array.from(new Set(rawReports.filter(function (item) { return item.content_type === "report"; }).map(function (item) { return item.content_id; }).filter(Boolean)));
+    const commentTargetIds = Array.from(new Set(rawReports.filter(function (item) { return item.content_type === "comment"; }).map(function (item) { return item.content_id; }).filter(Boolean)));
+
+    let reporterProfiles = [];
+    let targetReports = [];
+    let targetComments = [];
+    let reportsForComments = [];
+
+    if (reporterIds.length > 0) {
+      const profileRes = await supabaseClient
+        .from("profiles")
+        .select("id, username, role, avatar_url")
+        .in("id", reporterIds);
+      if (!profileRes.error) reporterProfiles = profileRes.data || [];
+    }
+
+    if (reportTargetIds.length > 0) {
+      const reportRes = await supabaseClient
+        .from("reports")
+        .select("id, title, train, operator, departure_station, arrival_station, status")
+        .in("id", reportTargetIds);
+      if (!reportRes.error) targetReports = reportRes.data || [];
+    }
+
+    if (commentTargetIds.length > 0) {
+      const commentRes = await supabaseClient
+        .from("comments")
+        .select("id, report_id, content, status")
+        .in("id", commentTargetIds);
+      if (!commentRes.error) targetComments = commentRes.data || [];
+
+      const reportIdsFromComments = Array.from(new Set((targetComments || []).map(function (comment) { return comment.report_id; }).filter(Boolean)));
+      if (reportIdsFromComments.length > 0) {
+        const reportForCommentRes = await supabaseClient
+          .from("reports")
+          .select("id, title, train, operator, departure_station, arrival_station, status")
+          .in("id", reportIdsFromComments);
+        if (!reportForCommentRes.error) reportsForComments = reportForCommentRes.data || [];
+      }
+    }
+
+    moderationReports = rawReports.map(function (item) {
+      const reporterProfile = reporterProfiles.find(function (profile) { return profile.id === item.reported_by; }) || null;
+      const targetReport = targetReports.find(function (report) { return report.id === item.content_id; }) || null;
+      const targetComment = targetComments.find(function (comment) { return comment.id === item.content_id; }) || null;
+      const commentReport = targetComment ? reportsForComments.find(function (report) { return report.id === targetComment.report_id; }) : null;
+
+      return {
+        ...item,
+        reporter_profile: reporterProfile,
+        target_report: targetReport || commentReport || null,
+        target_comment: targetComment || null
+      };
+    });
+
+    updateAdminDashboardSummary();
+    afficherSignalementsAdmin();
+  }
+
+
   function ensureAdminUsersSection() {
     if (adminUsersSection) return adminUsersSection;
 
@@ -1790,6 +2190,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!canCurrentUserManageUsers()) {
       adminUsers = [];
+      moderationReports = [];
       section.style.display = "none";
       updateAdminDashboardVisibility();
       return;
@@ -1894,6 +2295,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!canCurrentUserManageUsers()) {
       adminUsers = [];
+      moderationReports = [];
       if (section) section.style.display = "none";
       updateAdminDashboardVisibility();
       return;
@@ -1991,6 +2393,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <p>${escapeHtml(report.conclusion)}</p>
               <p class="rating">${afficherEtoiles(report.rating)}</p>
             </div>
+            ${creerSignalementReportHtml(report)}
             ${creerCommentairesHtml(report)}
             ${creerAdminReportActionsHtml(report)}
             <div class="report-bottom-actions">
@@ -2104,6 +2507,163 @@ document.addEventListener("DOMContentLoaded", function () {
           alert(getFriendlySupabaseError(error, "admin-hide-comment"));
           button.disabled = false;
           button.textContent = originalText;
+        }
+      });
+    });
+
+    document.querySelectorAll(".signal-login-button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        openAuthModal();
+        setAuthMessage("Connectez-vous pour signaler un contenu.", "error");
+      });
+    });
+
+    document.querySelectorAll(".report-signal-form").forEach(function (signalForm) {
+      signalForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (!currentUser) {
+          openAuthModal();
+          setAuthMessage("Connectez-vous pour signaler un contenu.", "error");
+          return;
+        }
+
+        if (isCurrentUserBanned()) {
+          alert("Votre compte est actuellement bloqué. Vous ne pouvez pas envoyer de signalement.");
+          return;
+        }
+
+        const reportId = signalForm.getAttribute("data-report-id");
+        const reportTitle = signalForm.getAttribute("data-report-title") || "ce report";
+        const reasonInput = signalForm.querySelector(".signal-reason");
+        const detailsInput = signalForm.querySelector(".signal-details");
+        const status = signalForm.querySelector(".signal-status");
+        const button = signalForm.querySelector("button[type='submit']");
+        const reason = reasonInput.value;
+        const details = detailsInput.value.trim();
+
+        if (!reason) {
+          if (status) {
+            status.textContent = "Choisissez une raison de signalement.";
+            status.className = "signal-status error";
+          }
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Envoi...";
+        if (status) {
+          status.textContent = "Envoi du signalement...";
+          status.className = "signal-status";
+        }
+
+        try {
+          const { error } = await supabaseClient.from("moderation_reports").insert({
+            reported_by: currentUser.id,
+            content_type: "report",
+            content_id: reportId,
+            reason,
+            details: details || "",
+            status: "pending"
+          });
+
+          if (error) throw error;
+
+          reasonInput.value = "";
+          detailsInput.value = "";
+          if (status) {
+            status.textContent = "Merci, votre signalement a été envoyé à l’équipe RailReporters.";
+            status.className = "signal-status ok";
+          }
+        } catch (error) {
+          if (status) {
+            status.textContent = getFriendlySupabaseError(error, "signal");
+            status.className = "signal-status error";
+          } else {
+            alert(getFriendlySupabaseError(error, "signal"));
+          }
+        } finally {
+          button.disabled = false;
+          button.textContent = "Envoyer le signalement";
+        }
+      });
+    });
+
+
+    document.querySelectorAll(".comment-signal-form").forEach(function (signalForm) {
+      signalForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        if (!currentUser) {
+          openAuthModal();
+          setAuthMessage("Connectez-vous pour signaler un contenu.", "error");
+          return;
+        }
+
+        if (isCurrentUserBanned()) {
+          alert("Votre compte est actuellement bloqué. Vous ne pouvez pas envoyer de signalement.");
+          return;
+        }
+
+        const commentId = signalForm.getAttribute("data-comment-id");
+        const reasonInput = signalForm.querySelector(".signal-reason");
+        const detailsInput = signalForm.querySelector(".signal-details");
+        const status = signalForm.querySelector(".signal-status");
+        const button = signalForm.querySelector("button[type='submit']");
+        const reason = reasonInput ? reasonInput.value : "";
+        const details = detailsInput ? detailsInput.value.trim() : "";
+
+        if (!commentId) {
+          if (status) {
+            status.textContent = "Impossible d’identifier le commentaire à signaler.";
+            status.className = "signal-status error";
+          }
+          return;
+        }
+
+        if (!reason) {
+          if (status) {
+            status.textContent = "Choisissez une raison de signalement.";
+            status.className = "signal-status error";
+          }
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Envoi...";
+        if (status) {
+          status.textContent = "Envoi du signalement...";
+          status.className = "signal-status";
+        }
+
+        try {
+          const { error } = await supabaseClient.from("moderation_reports").insert({
+            reported_by: currentUser.id,
+            content_type: "comment",
+            content_id: commentId,
+            reason,
+            details: details || "",
+            status: "pending"
+          });
+
+          if (error) throw error;
+
+          if (reasonInput) reasonInput.value = "";
+          if (detailsInput) detailsInput.value = "";
+          if (status) {
+            status.textContent = "Merci, votre signalement a été envoyé à l’équipe RailReporters.";
+            status.className = "signal-status ok";
+          }
+        } catch (error) {
+          if (status) {
+            status.textContent = getFriendlySupabaseError(error, "signal");
+            status.className = "signal-status error";
+          } else {
+            alert(getFriendlySupabaseError(error, "signal"));
+          }
+        } finally {
+          button.disabled = false;
+          button.textContent = "Envoyer le signalement";
         }
       });
     });

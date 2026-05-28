@@ -1879,3 +1879,305 @@ body {
     text-align: center;
   }
 }
+
+
+/* SIGNALEMENTS V2 */
+
+.report-signal-section {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(254, 243, 199, 0.82), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+}
+
+.report-signal-section h4::before {
+  color: #f59e0b;
+}
+
+.signal-login-button,
+.report-signal-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(245, 158, 11, 0.18);
+}
+
+.signal-login-button:hover,
+.report-signal-form button:hover {
+  transform: translateY(-1px);
+  opacity: 0.96;
+}
+
+.signal-login-button:disabled,
+.report-signal-form button:disabled {
+  opacity: 0.60;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.report-signal-form {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+  margin: 18px auto 0;
+}
+
+.report-signal-form label {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.report-signal-form select,
+.report-signal-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #fcd34d;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font: inherit;
+}
+
+.report-signal-form textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.signal-status {
+  margin: 4px 0 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(251, 191, 36, 0.45) !important;
+}
+
+.signal-status.ok {
+  color: #166534 !important;
+  background: #ecfdf5 !important;
+  border-color: #bbf7d0 !important;
+}
+
+.signal-status.error {
+  color: #991b1b !important;
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+/* SIGNALEMENT COMMENTAIRE V2 */
+
+.comment-signal-block,
+.comment-signal-details {
+  margin-top: 12px;
+}
+
+.comment-signal-details {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 251, 235, 0.78);
+  border: 1px solid rgba(245, 158, 11, 0.26);
+}
+
+.comment-signal-details summary {
+  cursor: pointer;
+  color: #92400e;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.comment-signal-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.comment-signal-form label {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.comment-signal-form select,
+.comment-signal-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #fcd34d;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font: inherit;
+}
+
+.comment-signal-form textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.comment-signal-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.comment-signal-login-button {
+  font-size: 13px;
+  padding: 10px 13px;
+}
+
+.comment-signal-message {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+
+
+/* =====================================================
+   V2 ADMIN — Signalements
+   ===================================================== */
+.admin-moderation-reports-section {
+  grid-column: 1 / -1;
+}
+
+.admin-moderation-reports-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-moderation-report-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.admin-moderation-report-titleline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.admin-moderation-type,
+.admin-moderation-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.admin-moderation-type {
+  color: #1e3a8a;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.admin-moderation-status.status-pending {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.16);
+}
+
+.admin-moderation-status.status-reviewed {
+  color: #075985;
+  background: rgba(14, 165, 233, 0.14);
+}
+
+.admin-moderation-status.status-rejected {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.admin-moderation-status.status-action_taken {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.admin-moderation-report-card h3 {
+  margin: 0 0 8px;
+  color: #111827;
+}
+
+.admin-moderation-report-card p {
+  margin: 0 0 8px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.admin-moderation-details {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+}
+
+.admin-moderation-details.muted {
+  color: #64748b;
+  font-style: italic;
+}
+
+.admin-moderation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 190px;
+}
+
+.admin-moderation-status-button {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.admin-moderation-status-button.secondary {
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.2);
+}
+
+.admin-moderation-status-button.success {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2);
+}
+
+.admin-moderation-status-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+@media (max-width: 780px) {
+  .admin-moderation-report-card {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-moderation-actions {
+    min-width: 0;
+  }
+}
