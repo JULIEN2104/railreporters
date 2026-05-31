@@ -1910,6 +1910,57 @@ document.addEventListener("DOMContentLoaded", function () {
     return adminModerationReportsSection;
   }
 
+  function getModerationContentStatus(item) {
+    if (item.content_type === "report" && item.target_report) {
+      return item.target_report.status || "";
+    }
+
+    if (item.content_type === "comment" && item.target_comment) {
+      return item.target_comment.status || "";
+    }
+
+    return "";
+  }
+
+  function creerAdminModerationContentActionHtml(item) {
+    const type = item.content_type;
+    const contentId = item.content_id;
+    const status = getModerationContentStatus(item);
+
+    if (type !== "report" && type !== "comment") {
+      return "";
+    }
+
+    if (!contentId) {
+      return `<button class="admin-moderation-hide-content-button danger" disabled>Contenu introuvable</button>`;
+    }
+
+    if (type === "report" && !item.target_report) {
+      return `<button class="admin-moderation-hide-content-button danger" disabled>Report introuvable</button>`;
+    }
+
+    if (type === "comment" && !item.target_comment) {
+      return `<button class="admin-moderation-hide-content-button danger" disabled>Commentaire introuvable</button>`;
+    }
+
+    if (status === "hidden") {
+      return `<button class="admin-moderation-hide-content-button danger" disabled>Contenu déjà masqué</button>`;
+    }
+
+    const label = type === "report" ? "Masquer le report signalé" : "Masquer le commentaire signalé";
+
+    return `
+      <button
+        class="admin-moderation-hide-content-button danger"
+        data-moderation-id="${escapeHtml(item.id)}"
+        data-content-id="${escapeHtml(contentId)}"
+        data-content-type="${escapeHtml(type)}"
+      >
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }
+
   function creerAdminModerationReportCardHtml(item) {
     const createdAt = item.created_at ? formaterDate(String(item.created_at).slice(0, 10)) : "Date inconnue";
     const details = item.details ? `<p class="admin-moderation-details">${escapeHtml(item.details)}</p>` : `<p class="admin-moderation-details muted">Aucun détail complémentaire.</p>`;
@@ -1933,6 +1984,7 @@ document.addEventListener("DOMContentLoaded", function () {
           ${details}
         </div>
         <div class="admin-moderation-actions">
+          ${creerAdminModerationContentActionHtml(item)}
           <button class="admin-moderation-status-button" data-report-id="${escapeHtml(item.id)}" data-status="reviewed">Marquer comme examiné</button>
           <button class="admin-moderation-status-button secondary" data-report-id="${escapeHtml(item.id)}" data-status="rejected">Rejeter</button>
           <button class="admin-moderation-status-button success" data-report-id="${escapeHtml(item.id)}" data-status="action_taken">Action effectuée</button>
@@ -1963,6 +2015,77 @@ document.addEventListener("DOMContentLoaded", function () {
 
     adminModerationReportsEmpty.style.display = "none";
     adminModerationReportsList.innerHTML = moderationReports.map(creerAdminModerationReportCardHtml).join("");
+
+    adminModerationReportsList.querySelectorAll(".admin-moderation-hide-content-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const moderationReportId = button.getAttribute("data-moderation-id");
+        const contentId = button.getAttribute("data-content-id");
+        const contentType = button.getAttribute("data-content-type");
+
+        if (!canCurrentUserManageModerationReports()) {
+          alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        const contentLabel = contentType === "report" ? "report" : "commentaire";
+        const confirmed = window.confirm(
+          "Voulez-vous vraiment masquer le " + contentLabel + " signalé ?\n\n" +
+          "Le signalement sera automatiquement marqué comme action effectuée."
+        );
+
+        if (!confirmed) return;
+
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Traitement...";
+
+        try {
+          const targetTable = contentType === "report" ? "reports" : "comments";
+          const targetContext = contentType === "report" ? "admin-hide-report" : "admin-hide-comment";
+
+          const { error: contentError } = await supabaseClient
+            .from(targetTable)
+            .update({ status: "hidden" })
+            .eq("id", contentId);
+
+          if (contentError) {
+            throw contentError;
+          }
+
+          const { error: moderationError } = await supabaseClient
+            .from("moderation_reports")
+            .update({
+              status: "action_taken",
+              reviewed_at: new Date().toISOString()
+            })
+            .eq("id", moderationReportId);
+
+          if (moderationError) {
+            throw moderationError;
+          }
+
+          if (contentType === "report" && openedReportId === contentId) {
+            openedReportId = null;
+          }
+
+          await chargerReportsSupabase(true);
+          if (canCurrentUserManageReports()) await chargerReportsMasquesAdmin();
+          if (canCurrentUserManageComments()) await chargerCommentairesMasquesAdmin();
+          await chargerSignalementsAdmin();
+
+          alert(
+            contentType === "report"
+              ? "Report signalé masqué et signalement marqué comme traité."
+              : "Commentaire signalé masqué et signalement marqué comme traité."
+          );
+        } catch (error) {
+          const context = contentType === "report" ? "admin-hide-report" : "admin-hide-comment";
+          alert(getFriendlySupabaseError(error, context));
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
+    });
 
     adminModerationReportsList.querySelectorAll(".admin-moderation-status-button").forEach(function (button) {
       button.addEventListener("click", async function () {

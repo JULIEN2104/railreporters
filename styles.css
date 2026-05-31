@@ -2167,6 +2167,23 @@ body {
   box-shadow: 0 8px 18px rgba(22, 163, 74, 0.2);
 }
 
+.admin-moderation-hide-content-button.danger {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ef4444, #991b1b);
+  box-shadow: 0 8px 18px rgba(153, 27, 27, 0.22);
+}
+
+.admin-moderation-hide-content-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .admin-moderation-status-button:disabled {
   opacity: 0.65;
   cursor: wait;
