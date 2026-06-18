@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + espace admin + aperçu contenu signalé.
+     Version V2 beta : correction du retour vers les signalements et réactivation des boutons Voir le contenu.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -42,6 +42,11 @@ document.addEventListener("DOMContentLoaded", function () {
   let adminModerationReportsSection = null;
   let adminModerationReportsList = null;
   let adminModerationReportsEmpty = null;
+  let moderationPreviewReport = null;
+  let moderationPreviewCommentId = null;
+  let moderationSourceReportId = null;
+  let moderationShouldFocus = false;
+  let moderationHighlightTimer = null;
 
   if (!window.supabase) {
     console.error("Supabase n'est pas chargé.");
@@ -77,6 +82,232 @@ document.addEventListener("DOMContentLoaded", function () {
     const morceaux = String(dateString).split("-");
     if (morceaux.length !== 3) return dateString;
     return `${morceaux[2]}/${morceaux[1]}/${morceaux[0]}`;
+  }
+
+  function clearModerationContentView(shouldRender = false) {
+    moderationPreviewReport = null;
+    moderationPreviewCommentId = null;
+    moderationSourceReportId = null;
+    moderationShouldFocus = false;
+    if (moderationHighlightTimer) {
+      window.clearTimeout(moderationHighlightTimer);
+      moderationHighlightTimer = null;
+    }
+    if (shouldRender && reportsList) {
+      openedReportId = null;
+      afficherReportsSupabase();
+    }
+  }
+
+  function isModerationContentOpen(reportId) {
+    return Boolean(
+      moderationPreviewReport &&
+      String(moderationPreviewReport.id) === String(reportId)
+    );
+  }
+
+  function getReportListForDisplay() {
+    if (!moderationPreviewReport) return reports;
+
+    const previewId = String(moderationPreviewReport.id);
+    const replaced = reports.map(function (report) {
+      return String(report.id) === previewId ? moderationPreviewReport : report;
+    });
+
+    const alreadyPresent = reports.some(function (report) {
+      return String(report.id) === previewId;
+    });
+
+    return alreadyPresent ? replaced : [moderationPreviewReport].concat(replaced);
+  }
+
+  function scrollBackToModerationReport() {
+    const sourceId = moderationSourceReportId;
+    clearModerationContentView(true);
+
+    // Reconstruit les cartes de signalement afin de réactiver
+    // les boutons "Voir le contenu" après le retour.
+    afficherSignalementsAdmin();
+
+    window.setTimeout(function () {
+      const target = sourceId
+        ? document.getElementById(`moderation-report-${sourceId}`)
+        : adminModerationReportsSection;
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("admin-moderation-return-highlight");
+      window.setTimeout(function () {
+        target.classList.remove("admin-moderation-return-highlight");
+      }, 2600);
+    }, 80);
+  }
+
+  function scheduleModerationContentFocus() {
+    if (!moderationShouldFocus || !moderationPreviewReport) return;
+    moderationShouldFocus = false;
+
+    window.setTimeout(function () {
+      const reportId = moderationPreviewReport && moderationPreviewReport.id;
+      if (!reportId) return;
+
+      const commentElement = moderationPreviewCommentId
+        ? document.getElementById(`comment-${moderationPreviewCommentId}`)
+        : null;
+      const reportElement = document.getElementById(`report-card-${reportId}`);
+      const target = commentElement || reportElement;
+
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: commentElement ? "center" : "start" });
+
+      if (commentElement) {
+        commentElement.classList.add("moderation-comment-highlight");
+        if (moderationHighlightTimer) window.clearTimeout(moderationHighlightTimer);
+        moderationHighlightTimer = window.setTimeout(function () {
+          commentElement.classList.remove("moderation-comment-highlight");
+          moderationHighlightTimer = null;
+        }, 7500);
+      }
+    }, 140);
+  }
+
+  async function chargerReportCompletPourModeration(reportId, targetItem) {
+    const { data: report, error: reportError } = await supabaseClient
+      .from("reports")
+      .select(`
+        id,
+        user_id,
+        title,
+        train,
+        operator,
+        departure_station,
+        departure_time,
+        arrival_station,
+        arrival_time,
+        travel_date,
+        travel_class,
+        cover_photo_url,
+        rating,
+        conclusion,
+        status,
+        created_at,
+        profiles (
+          username,
+          role,
+          avatar_url
+        )
+      `)
+      .eq("id", reportId)
+      .single();
+
+    if (reportError || !report) {
+      throw reportError || new Error("Report introuvable.");
+    }
+
+    const [sectionsRes, photosRes, commentsRes] = await Promise.all([
+      supabaseClient
+        .from("report_sections")
+        .select("id, report_id, section_type, title, content, position")
+        .eq("report_id", reportId)
+        .order("position", { ascending: true }),
+      supabaseClient
+        .from("report_photos")
+        .select("id, report_id, section_id, photo_url, caption, position")
+        .eq("report_id", reportId)
+        .order("position", { ascending: true }),
+      supabaseClient
+        .from("comments")
+        .select(`
+          id,
+          report_id,
+          user_id,
+          content,
+          created_at,
+          status,
+          profiles (
+            username,
+            role,
+            avatar_url
+          )
+        `)
+        .eq("report_id", reportId)
+        .order("created_at", { ascending: true })
+    ]);
+
+    const comments = commentsRes.error ? [] : (commentsRes.data || []);
+
+    // Si une policy plus stricte empêche la lecture globale des commentaires,
+    // conserver au minimum le commentaire directement lié au signalement.
+    if (
+      targetItem &&
+      targetItem.target_comment &&
+      !comments.some(function (comment) { return String(comment.id) === String(targetItem.target_comment.id); })
+    ) {
+      comments.push({
+        ...targetItem.target_comment,
+        profiles: targetItem.target_comment_author || null
+      });
+    }
+
+    return {
+      ...report,
+      sections: sectionsRes.error ? [] : (sectionsRes.data || []),
+      photos: photosRes.error ? [] : (photosRes.data || []),
+      comments,
+      _moderationPreview: true
+    };
+  }
+
+  async function ouvrirContenuSignale(item, button) {
+    if (!canCurrentUserManageModerationReports()) {
+      alert("Cette action est réservée à l’administrateur RailReporters.");
+      return;
+    }
+
+    let reportId = null;
+    let commentId = null;
+
+    if (item.content_type === "report") {
+      reportId = item.target_report ? item.target_report.id : item.content_id;
+    } else if (item.content_type === "comment") {
+      commentId = item.target_comment ? item.target_comment.id : item.content_id;
+      reportId = item.target_comment ? item.target_comment.report_id : (item.target_report && item.target_report.id);
+    }
+
+    if (!reportId) {
+      alert("Le contenu associé à ce signalement est introuvable.");
+      return;
+    }
+
+    const originalText = button ? button.textContent : "Voir le contenu";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Ouverture...";
+    }
+
+    try {
+      const fullReport = await chargerReportCompletPourModeration(reportId, item);
+      moderationPreviewReport = fullReport;
+      moderationPreviewCommentId = commentId;
+      moderationSourceReportId = item.id;
+      moderationShouldFocus = true;
+      openedReportId = fullReport.id;
+      searchQuery = "";
+      if (searchInput) searchInput.value = "";
+      afficherReportsSupabase();
+
+      // Le bouton avait été désactivé pendant le chargement.
+      // On le remet immédiatement dans son état normal.
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    } catch (error) {
+      alert(getFriendlySupabaseError(error, "read") || "Impossible d’ouvrir ce contenu pour le moment.");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
   }
 
   function getRoleLabel(role) {
@@ -527,6 +758,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!loginButton || !badge) return;
 
     if (!currentUser) {
+      clearModerationContentView(false);
       badge.className = "auth-status-badge";
       badge.textContent = "Non connecté";
       loginButton.textContent = "Se connecter";
@@ -558,6 +790,9 @@ document.addEventListener("DOMContentLoaded", function () {
     badge.className = "auth-status-badge";
     if (currentProfile?.role === "admin") badge.classList.add("admin");
     loginButton.textContent = "Mon compte";
+    if (!canCurrentUserManageModerationReports()) {
+      clearModerationContentView(false);
+    }
   }
 
   async function loadProfile(user) {
@@ -676,6 +911,7 @@ document.addEventListener("DOMContentLoaded", function () {
     currentUser = null;
     currentProfile = null;
     updateAuthDisplay();
+    await chargerReportsSupabase(false);
     setAuthMessage("Déconnexion effectuée.", "ok");
   }
 
@@ -693,6 +929,9 @@ document.addEventListener("DOMContentLoaded", function () {
         currentUser = null;
         currentProfile = null;
         updateAuthDisplay();
+        chargerReportsSupabase(false).catch(function (error) {
+          console.warn("Impossible de recharger les reports après déconnexion", error);
+        });
       }
     });
   }
@@ -1275,12 +1514,31 @@ document.addEventListener("DOMContentLoaded", function () {
       </details>`;
   }
 
+  function creerModerationNavigationHtml(report) {
+    if (!isModerationContentOpen(report.id)) return "";
+
+    const statusLabel = report.status === "hidden" ? "Contenu actuellement masqué" : "Contenu actuellement publié";
+    const focusLabel = moderationPreviewCommentId ? "Commentaire signalé localisé ci-dessous." : "Report signalé ouvert en mode modération.";
+
+    return `
+      <div class="moderation-content-navigation">
+        <div>
+          <span class="moderation-content-navigation-kicker">Mode modération</span>
+          <strong>${escapeHtml(statusLabel)}</strong>
+          <p>${escapeHtml(focusLabel)}</p>
+        </div>
+        <button type="button" class="return-to-moderation-reports-button">Retour aux signalements</button>
+      </div>`;
+  }
+
   function creerCommentairesHtml(report) {
     const comments = report.comments || [];
     const listHtml = comments.length === 0
       ? `<p class="no-comments">Aucun commentaire pour le moment.</p>`
       : comments.map(function (comment) {
-          const adminButton = canCurrentUserManageComments()
+          const isHidden = comment.status === "hidden";
+          const isFocused = moderationPreviewCommentId && String(moderationPreviewCommentId) === String(comment.id);
+          const adminButton = canCurrentUserManageComments() && !isHidden
             ? `<div class="admin-comment-actions">
                 <button
                   class="admin-hide-comment-button"
@@ -1292,11 +1550,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 </button>
               </div>`
             : "";
-          const signalHtml = creerSignalementCommentaireHtml(report, comment);
+          const adminStatus = canCurrentUserManageComments() && isHidden
+            ? `<span class="comment-moderation-status">hidden · visible uniquement en modération</span>`
+            : "";
+          const signalHtml = isHidden ? "" : creerSignalementCommentaireHtml(report, comment);
 
           return `
-            <div class="comment">
+            <div id="comment-${escapeHtml(comment.id)}" class="comment${isFocused ? " moderation-comment-highlight" : ""}${isHidden ? " moderation-hidden-comment" : ""}">
+              ${isFocused ? `<span class="moderation-comment-flag">Commentaire signalé</span>` : ""}
               <span class="comment-author">${escapeHtml(getAuthorLabel(comment.profiles))}</span>
+              ${adminStatus}
               <p>${escapeHtml(comment.content)}</p>
               <span>${comment.created_at ? escapeHtml(formaterDate(comment.created_at.slice(0, 10))) : ""}</span>
               ${adminButton}
@@ -1434,6 +1697,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function creerAdminReportActionsHtml(report) {
     if (!canCurrentUserManageReports()) return "";
+
+    if (report.status === "hidden") {
+      return `
+        <div class="report-section admin-report-actions admin-report-hidden-notice">
+          <h4>Modération admin</h4>
+          <p>Ce report est actuellement masqué. Son ouverture en mode modération ne le rend pas public.</p>
+          <p class="admin-help-text">Utilisez l’Espace admin RailReporters pour le restaurer si nécessaire.</p>
+        </div>`;
+    }
 
     return `
       <div class="report-section admin-report-actions">
@@ -1744,6 +2016,10 @@ document.addEventListener("DOMContentLoaded", function () {
           if (error) throw error;
 
           openedReportId = reportId;
+          if (String(moderationPreviewCommentId || "") === String(commentId)) {
+            clearModerationContentView(false);
+            openedReportId = reportId;
+          }
           await chargerReportsSupabase(true);
           await chargerCommentairesMasquesAdmin();
           alert("Commentaire restauré avec succès.");
@@ -1922,6 +2198,29 @@ document.addEventListener("DOMContentLoaded", function () {
     return "";
   }
 
+  function creerAdminModerationViewContentHtml(item) {
+    if (item.content_type === "report") {
+      if (!item.target_report) {
+        return `<button class="admin-moderation-view-content-button" disabled>Report introuvable</button>`;
+      }
+    } else if (item.content_type === "comment") {
+      if (!item.target_comment || !item.target_report) {
+        return `<button class="admin-moderation-view-content-button" disabled>Commentaire introuvable</button>`;
+      }
+    } else {
+      return "";
+    }
+
+    return `
+      <button
+        class="admin-moderation-view-content-button"
+        data-moderation-id="${escapeHtml(item.id)}"
+      >
+        Voir le contenu
+      </button>
+    `;
+  }
+
   function creerAdminModerationContentActionHtml(item) {
     const type = item.content_type;
     const contentId = item.content_id;
@@ -2033,7 +2332,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const status = item.status || "pending";
 
     return `
-      <article class="admin-moderation-report-card status-${escapeHtml(status)}">
+      <article id="moderation-report-${escapeHtml(item.id)}" class="admin-moderation-report-card status-${escapeHtml(status)}">
         <div class="admin-moderation-report-main">
           <div class="admin-moderation-report-titleline">
             <span class="admin-moderation-type">${escapeHtml(getModerationContentTypeLabel(item.content_type))}</span>
@@ -2051,6 +2350,7 @@ document.addEventListener("DOMContentLoaded", function () {
           ${details}
         </div>
         <div class="admin-moderation-actions">
+          ${creerAdminModerationViewContentHtml(item)}
           ${creerAdminModerationContentActionHtml(item)}
           <button class="admin-moderation-status-button" data-report-id="${escapeHtml(item.id)}" data-status="reviewed">Marquer comme examiné</button>
           <button class="admin-moderation-status-button secondary" data-report-id="${escapeHtml(item.id)}" data-status="rejected">Rejeter</button>
@@ -2082,6 +2382,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
     adminModerationReportsEmpty.style.display = "none";
     adminModerationReportsList.innerHTML = moderationReports.map(creerAdminModerationReportCardHtml).join("");
+
+    adminModerationReportsList.querySelectorAll(".admin-moderation-view-content-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const moderationReportId = button.getAttribute("data-moderation-id");
+        const item = moderationReports.find(function (moderationItem) {
+          return String(moderationItem.id) === String(moderationReportId);
+        });
+
+        if (!item) {
+          alert("Le signalement ou son contenu est introuvable.");
+          return;
+        }
+
+        await ouvrirContenuSignale(item, button);
+      });
+    });
 
     adminModerationReportsList.querySelectorAll(".admin-moderation-hide-content-button").forEach(function (button) {
       button.addEventListener("click", async function () {
@@ -2133,6 +2449,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (contentType === "report" && openedReportId === contentId) {
             openedReportId = null;
+          }
+          if (
+            moderationPreviewReport &&
+            (String(moderationPreviewReport.id) === String(contentId) || String(moderationPreviewCommentId || "") === String(contentId))
+          ) {
+            clearModerationContentView(false);
           }
 
           await chargerReportsSupabase(true);
@@ -2540,9 +2862,13 @@ document.addEventListener("DOMContentLoaded", function () {
   function afficherReportsSupabase() {
     reportsList.innerHTML = "";
 
-    const filtered = reports.filter(reportMatchesSearch);
+    const reportsForDisplay = getReportListForDisplay();
+    const filtered = reportsForDisplay.filter(function (report) {
+      if (moderationPreviewReport && String(report.id) === String(moderationPreviewReport.id)) return true;
+      return reportMatchesSearch(report);
+    });
 
-    if (reports.length === 0) {
+    if (reportsForDisplay.length === 0) {
       emptyState.style.display = "block";
       emptyState.textContent = "Aucun report Supabase publié pour le moment.";
       return;
@@ -2565,7 +2891,7 @@ document.addEventListener("DOMContentLoaded", function () {
       `;
 
       const article = document.createElement("article");
-      article.className = "report-card";
+      article.className = "report-card" + (isModerationContentOpen(report.id) ? " moderation-content-open" : "");
       article.id = `report-card-${report.id}`;
       article.innerHTML = `
         <div class="report-summary">
@@ -2590,6 +2916,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         <div class="report-details ${isOpen ? "" : "hidden"}" id="report-details-${escapeHtml(report.id)}">
           <div class="report-content">
+            ${creerModerationNavigationHtml(report)}
             <div class="report-section">
               <h4>Auteur du report</h4>
               <p>${escapeHtml(getAuthorLabel(report.profiles))}</p>
@@ -2615,6 +2942,16 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".open-report-button").forEach(function (button) {
       button.addEventListener("click", function () {
         const reportId = button.getAttribute("data-report-id");
+
+        if (isModerationContentOpen(reportId) && openedReportId === reportId) {
+          scrollBackToModerationReport();
+          return;
+        }
+
+        if (moderationPreviewReport && String(moderationPreviewReport.id) !== String(reportId)) {
+          clearModerationContentView(false);
+        }
+
         openedReportId = openedReportId === reportId ? null : reportId;
         afficherReportsSupabase();
         if (openedReportId) {
@@ -2627,10 +2964,22 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".close-report-bottom-button").forEach(function (button) {
       button.addEventListener("click", function () {
         const reportId = button.getAttribute("data-report-id");
+
+        if (isModerationContentOpen(reportId)) {
+          scrollBackToModerationReport();
+          return;
+        }
+
         openedReportId = null;
         afficherReportsSupabase();
         const card = document.getElementById(`report-card-${reportId}`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+
+    document.querySelectorAll(".return-to-moderation-reports-button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        scrollBackToModerationReport();
       });
     });
 
@@ -2665,6 +3014,9 @@ document.addEventListener("DOMContentLoaded", function () {
           if (error) throw error;
 
           openedReportId = null;
+          if (moderationPreviewReport && String(moderationPreviewReport.id) === String(reportId)) {
+            clearModerationContentView(false);
+          }
           await chargerReportsSupabase(false);
           await chargerReportsMasquesAdmin();
           alert("Report masqué avec succès.");
@@ -2919,10 +3271,13 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
     });
+
+    scheduleModerationContentFocus();
   }
 
   if (searchInput) {
     searchInput.addEventListener("input", function () {
+      clearModerationContentView(false);
       searchQuery = searchInput.value.trim();
       openedReportId = null;
       afficherReportsSupabase();
