@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : Auth + reports Supabase + espace admin + signalement report/commentaire.
+     Version V2 beta : Auth + reports Supabase + espace admin + aperçu contenu signalé.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -1961,6 +1961,72 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
   }
 
+  function creerAdminModerationContentPreviewHtml(item) {
+    if (item.content_type === "report") {
+      const report = item.target_report;
+
+      if (!report) {
+        return `
+          <div class="admin-moderation-content-preview missing">
+            <strong>Contenu signalé :</strong> Report introuvable
+          </div>
+        `;
+      }
+
+      const author = item.target_report_author ? getAuthorLabel(item.target_report_author) : "Auteur inconnu";
+      const trajet = [report.departure_station, report.arrival_station].filter(Boolean).join(" → ") || "Trajet non renseigné";
+      const travelDate = report.travel_date ? formaterDate(String(report.travel_date).slice(0, 10)) : "Date non renseignée";
+
+      return `
+        <div class="admin-moderation-content-preview">
+          <span class="admin-preview-kicker">Contenu signalé</span>
+          <strong>Report : ${escapeHtml(report.title || "Report sans titre")}</strong>
+          <ul>
+            <li><span>Auteur</span><strong>${escapeHtml(author)}</strong></li>
+            <li><span>Trajet</span><strong>${escapeHtml(trajet)}</strong></li>
+            <li><span>Date du voyage</span><strong>${escapeHtml(travelDate)}</strong></li>
+            <li><span>Statut</span><strong>${escapeHtml(report.status || "inconnu")}</strong></li>
+          </ul>
+        </div>
+      `;
+    }
+
+    if (item.content_type === "comment") {
+      const comment = item.target_comment;
+
+      if (!comment) {
+        return `
+          <div class="admin-moderation-content-preview missing">
+            <strong>Contenu signalé :</strong> Commentaire introuvable
+          </div>
+        `;
+      }
+
+      const author = item.target_comment_author ? getAuthorLabel(item.target_comment_author) : "Auteur inconnu";
+      const excerpt = comment.content ? String(comment.content).slice(0, 180) : "Commentaire sans contenu";
+      const reportTitle = item.target_report ? item.target_report.title : "Report associé introuvable";
+
+      return `
+        <div class="admin-moderation-content-preview">
+          <span class="admin-preview-kicker">Contenu signalé</span>
+          <strong>Commentaire</strong>
+          <blockquote>${escapeHtml(excerpt)}${comment.content && comment.content.length > 180 ? "…" : ""}</blockquote>
+          <ul>
+            <li><span>Auteur</span><strong>${escapeHtml(author)}</strong></li>
+            <li><span>Report associé</span><strong>${escapeHtml(reportTitle || "Report sans titre")}</strong></li>
+            <li><span>Statut</span><strong>${escapeHtml(comment.status || "inconnu")}</strong></li>
+          </ul>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="admin-moderation-content-preview missing">
+        <strong>Contenu signalé :</strong> Type non encore pris en charge
+      </div>
+    `;
+  }
+
   function creerAdminModerationReportCardHtml(item) {
     const createdAt = item.created_at ? formaterDate(String(item.created_at).slice(0, 10)) : "Date inconnue";
     const details = item.details ? `<p class="admin-moderation-details">${escapeHtml(item.details)}</p>` : `<p class="admin-moderation-details muted">Aucun détail complémentaire.</p>`;
@@ -1981,6 +2047,7 @@ document.addEventListener("DOMContentLoaded", function () {
             <br>
             <strong>Date :</strong> ${escapeHtml(createdAt)}
           </p>
+          ${creerAdminModerationContentPreviewHtml(item)}
           ${details}
         </div>
         <div class="admin-moderation-actions">
@@ -2169,6 +2236,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let targetReports = [];
     let targetComments = [];
     let reportsForComments = [];
+    let targetAuthorProfiles = [];
 
     if (reporterIds.length > 0) {
       const profileRes = await supabaseClient
@@ -2181,7 +2249,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (reportTargetIds.length > 0) {
       const reportRes = await supabaseClient
         .from("reports")
-        .select("id, title, train, operator, departure_station, arrival_station, status")
+        .select("id, user_id, title, train, operator, departure_station, arrival_station, travel_date, status")
         .in("id", reportTargetIds);
       if (!reportRes.error) targetReports = reportRes.data || [];
     }
@@ -2189,7 +2257,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (commentTargetIds.length > 0) {
       const commentRes = await supabaseClient
         .from("comments")
-        .select("id, report_id, content, status")
+        .select("id, report_id, user_id, content, status")
         .in("id", commentTargetIds);
       if (!commentRes.error) targetComments = commentRes.data || [];
 
@@ -2197,10 +2265,23 @@ document.addEventListener("DOMContentLoaded", function () {
       if (reportIdsFromComments.length > 0) {
         const reportForCommentRes = await supabaseClient
           .from("reports")
-          .select("id, title, train, operator, departure_station, arrival_station, status")
+          .select("id, user_id, title, train, operator, departure_station, arrival_station, travel_date, status")
           .in("id", reportIdsFromComments);
         if (!reportForCommentRes.error) reportsForComments = reportForCommentRes.data || [];
       }
+    }
+
+    const targetAuthorIds = Array.from(new Set([
+      ...targetReports.map(function (report) { return report.user_id; }),
+      ...targetComments.map(function (comment) { return comment.user_id; })
+    ].filter(Boolean)));
+
+    if (targetAuthorIds.length > 0) {
+      const targetAuthorRes = await supabaseClient
+        .from("profiles")
+        .select("id, username, role, avatar_url")
+        .in("id", targetAuthorIds);
+      if (!targetAuthorRes.error) targetAuthorProfiles = targetAuthorRes.data || [];
     }
 
     moderationReports = rawReports.map(function (item) {
@@ -2208,12 +2289,16 @@ document.addEventListener("DOMContentLoaded", function () {
       const targetReport = targetReports.find(function (report) { return report.id === item.content_id; }) || null;
       const targetComment = targetComments.find(function (comment) { return comment.id === item.content_id; }) || null;
       const commentReport = targetComment ? reportsForComments.find(function (report) { return report.id === targetComment.report_id; }) : null;
+      const reportAuthorProfile = targetReport ? targetAuthorProfiles.find(function (profile) { return profile.id === targetReport.user_id; }) : null;
+      const commentAuthorProfile = targetComment ? targetAuthorProfiles.find(function (profile) { return profile.id === targetComment.user_id; }) : null;
 
       return {
         ...item,
         reporter_profile: reporterProfile,
         target_report: targetReport || commentReport || null,
-        target_comment: targetComment || null
+        target_comment: targetComment || null,
+        target_report_author: reportAuthorProfile || null,
+        target_comment_author: commentAuthorProfile || null
       };
     });
 
