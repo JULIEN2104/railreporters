@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : correction du retour vers les signalements et réactivation des boutons Voir le contenu.
+     Version V2 beta : notes internes admin privées sur les signalements.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let hiddenComments = [];
   let adminUsers = [];
   let moderationReports = [];
+  let moderationAdminNotesLoadError = null;
   let openedReportId = null;
   let searchQuery = "";
   let adminHiddenReportsSection = null;
@@ -418,6 +419,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (context === "admin-moderation-reports") {
         return "Impossible de modifier ce signalement. Cette action est réservée à l’administrateur RailReporters.";
+      }
+
+      if (context === "admin-notes") {
+        return "Impossible d’enregistrer cette note interne. Cette action est réservée à l’équipe de modération RailReporters.";
       }
 
       return "Cette action n’est pas autorisée avec votre compte.";
@@ -2156,6 +2161,84 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(item.content_id || "Contenu non identifié");
   }
 
+  function formaterDateHeureAdmin(value) {
+    if (!value) return "Date inconnue";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function getAdminNoteMetadata(item) {
+    const entry = item.private_admin_note;
+    if (!entry) return "Aucune note interne enregistrée.";
+
+    const dateText = formaterDateHeureAdmin(entry.updated_at || entry.created_at);
+    const authorText = item.private_admin_note_author
+      ? getAuthorLabel(item.private_admin_note_author)
+      : "Équipe de modération";
+
+    return `Dernière modification : ${dateText} — ${authorText}`;
+  }
+
+  function creerAdminModerationNoteHtml(item) {
+    if (moderationAdminNotesLoadError) {
+      return `
+        <section class="admin-moderation-note-editor unavailable">
+          <div class="admin-moderation-note-heading">
+            <div>
+              <span class="admin-note-kicker">Confidentiel</span>
+              <h4>Note interne admin</h4>
+            </div>
+          </div>
+          <p class="admin-moderation-note-load-error">Les notes internes sont momentanément indisponibles. Rechargez la page ou réessayez plus tard.</p>
+        </section>
+      `;
+    }
+
+    const entry = item.private_admin_note;
+    const note = entry && entry.note ? String(entry.note) : "";
+    const metadata = getAdminNoteMetadata(item);
+    const buttonLabel = entry ? "Mettre à jour la note" : "Enregistrer la note";
+
+    return `
+      <section class="admin-moderation-note-editor" data-moderation-id="${escapeHtml(item.id)}">
+        <div class="admin-moderation-note-heading">
+          <div>
+            <span class="admin-note-kicker">Confidentiel</span>
+            <h4>Note interne admin</h4>
+          </div>
+          <span class="admin-moderation-note-privacy">Visible uniquement par l’équipe de modération</span>
+        </div>
+        <textarea
+          class="admin-moderation-note-input"
+          data-moderation-id="${escapeHtml(item.id)}"
+          maxlength="1000"
+          rows="4"
+          placeholder="Exemple : contenu vérifié, commentaire masqué après examen."
+        >${escapeHtml(note)}</textarea>
+        <div class="admin-moderation-note-footer">
+          <div>
+            <span class="admin-moderation-note-count">${note.length}/1000</span>
+            <span class="admin-moderation-note-meta">${escapeHtml(metadata)}</span>
+          </div>
+          <button
+            type="button"
+            class="admin-moderation-note-save-button"
+            data-moderation-id="${escapeHtml(item.id)}"
+          >${escapeHtml(buttonLabel)}</button>
+        </div>
+        <p class="admin-moderation-note-status" aria-live="polite"></p>
+      </section>
+    `;
+  }
+
   function ensureAdminModerationReportsSection() {
     if (adminModerationReportsSection) return adminModerationReportsSection;
 
@@ -2348,6 +2431,7 @@ document.addEventListener("DOMContentLoaded", function () {
           </p>
           ${creerAdminModerationContentPreviewHtml(item)}
           ${details}
+          ${creerAdminModerationNoteHtml(item)}
         </div>
         <div class="admin-moderation-actions">
           ${creerAdminModerationViewContentHtml(item)}
@@ -2396,6 +2480,113 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         await ouvrirContenuSignale(item, button);
+      });
+    });
+
+    adminModerationReportsList.querySelectorAll(".admin-moderation-note-input").forEach(function (input) {
+      input.addEventListener("input", function () {
+        const editor = input.closest(".admin-moderation-note-editor");
+        const count = editor && editor.querySelector(".admin-moderation-note-count");
+        const status = editor && editor.querySelector(".admin-moderation-note-status");
+        if (count) count.textContent = `${input.value.length}/1000`;
+        if (status) {
+          status.textContent = "";
+          status.className = "admin-moderation-note-status";
+        }
+      });
+    });
+
+    adminModerationReportsList.querySelectorAll(".admin-moderation-note-save-button").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        const moderationReportId = button.getAttribute("data-moderation-id");
+        const item = moderationReports.find(function (moderationItem) {
+          return String(moderationItem.id) === String(moderationReportId);
+        });
+        const editor = button.closest(".admin-moderation-note-editor");
+        const input = editor && editor.querySelector(".admin-moderation-note-input");
+        const status = editor && editor.querySelector(".admin-moderation-note-status");
+        const metadata = editor && editor.querySelector(".admin-moderation-note-meta");
+        const count = editor && editor.querySelector(".admin-moderation-note-count");
+
+        function setNoteStatus(message, type) {
+          if (!status) return;
+          status.textContent = message;
+          status.className = "admin-moderation-note-status";
+          if (type) status.classList.add(type);
+        }
+
+        if (!canCurrentUserManageModerationReports() || !currentUser) {
+          setNoteStatus("Cette action est réservée à l’équipe de modération RailReporters.", "error");
+          return;
+        }
+
+        if (!item || !input) {
+          setNoteStatus("Le signalement associé à cette note est introuvable.", "error");
+          return;
+        }
+
+        const note = input.value.trim();
+        if (!note) {
+          setNoteStatus("Écrivez une note avant de l’enregistrer.", "error");
+          input.focus();
+          return;
+        }
+
+        if (note.length > 1000) {
+          setNoteStatus("La note ne peut pas dépasser 1000 caractères.", "error");
+          input.focus();
+          return;
+        }
+
+        const originalText = button.textContent;
+        const isUpdate = Boolean(item.private_admin_note && item.private_admin_note.id);
+        button.disabled = true;
+        button.textContent = isUpdate ? "Mise à jour..." : "Enregistrement...";
+        setNoteStatus("Enregistrement de la note interne...", "loading");
+
+        try {
+          let result;
+
+          if (isUpdate) {
+            result = await supabaseClient
+              .from("moderation_report_admin_notes")
+              .update({
+                note,
+                updated_by: currentUser.id,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", item.private_admin_note.id)
+              .select("id, moderation_report_id, note, created_by, updated_by, created_at, updated_at")
+              .single();
+          } else {
+            result = await supabaseClient
+              .from("moderation_report_admin_notes")
+              .insert({
+                moderation_report_id: moderationReportId,
+                note,
+                created_by: currentUser.id,
+                updated_by: currentUser.id
+              })
+              .select("id, moderation_report_id, note, created_by, updated_by, created_at, updated_at")
+              .single();
+          }
+
+          if (result.error) throw result.error;
+
+          item.private_admin_note = result.data;
+          item.private_admin_note_author = currentProfile || null;
+          input.value = result.data.note || note;
+          if (count) count.textContent = `${input.value.length}/1000`;
+          if (metadata) metadata.textContent = getAdminNoteMetadata(item);
+          button.textContent = "Mettre à jour la note";
+          setNoteStatus(isUpdate ? "Note interne mise à jour." : "Note interne enregistrée.", "ok");
+        } catch (error) {
+          console.warn("Erreur enregistrement note interne", error);
+          setNoteStatus(getFriendlySupabaseError(error, "admin-notes"), "error");
+          button.textContent = originalText;
+        } finally {
+          button.disabled = false;
+        }
       });
     });
 
@@ -2550,6 +2741,40 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const rawReports = data || [];
+    moderationAdminNotesLoadError = null;
+
+    const moderationReportIds = Array.from(new Set(rawReports.map(function (item) { return item.id; }).filter(Boolean)));
+    let privateAdminNotes = [];
+    let privateAdminNoteProfiles = [];
+
+    if (moderationReportIds.length > 0) {
+      const notesRes = await supabaseClient
+        .from("moderation_report_admin_notes")
+        .select("id, moderation_report_id, note, created_by, updated_by, created_at, updated_at")
+        .in("moderation_report_id", moderationReportIds);
+
+      if (notesRes.error) {
+        moderationAdminNotesLoadError = getFriendlySupabaseError(notesRes.error, "read");
+        console.warn("Erreur chargement notes internes admin", notesRes.error);
+      } else {
+        privateAdminNotes = notesRes.data || [];
+        const noteProfileIds = Array.from(new Set(privateAdminNotes.flatMap(function (entry) {
+          return [entry.updated_by, entry.created_by].filter(Boolean);
+        })));
+
+        if (noteProfileIds.length > 0) {
+          const noteProfilesRes = await supabaseClient
+            .from("profiles")
+            .select("id, username, role, avatar_url")
+            .in("id", noteProfileIds);
+
+          if (!noteProfilesRes.error) {
+            privateAdminNoteProfiles = noteProfilesRes.data || [];
+          }
+        }
+      }
+    }
+
     const reporterIds = Array.from(new Set(rawReports.map(function (item) { return item.reported_by; }).filter(Boolean)));
     const reportTargetIds = Array.from(new Set(rawReports.filter(function (item) { return item.content_type === "report"; }).map(function (item) { return item.content_id; }).filter(Boolean)));
     const commentTargetIds = Array.from(new Set(rawReports.filter(function (item) { return item.content_type === "comment"; }).map(function (item) { return item.content_id; }).filter(Boolean)));
@@ -2613,6 +2838,13 @@ document.addEventListener("DOMContentLoaded", function () {
       const commentReport = targetComment ? reportsForComments.find(function (report) { return report.id === targetComment.report_id; }) : null;
       const reportAuthorProfile = targetReport ? targetAuthorProfiles.find(function (profile) { return profile.id === targetReport.user_id; }) : null;
       const commentAuthorProfile = targetComment ? targetAuthorProfiles.find(function (profile) { return profile.id === targetComment.user_id; }) : null;
+      const privateAdminNote = privateAdminNotes.find(function (entry) {
+        return String(entry.moderation_report_id) === String(item.id);
+      }) || null;
+      const noteAuthorId = privateAdminNote ? (privateAdminNote.updated_by || privateAdminNote.created_by) : null;
+      const privateAdminNoteAuthor = noteAuthorId
+        ? privateAdminNoteProfiles.find(function (profile) { return String(profile.id) === String(noteAuthorId); }) || null
+        : null;
 
       return {
         ...item,
@@ -2620,7 +2852,9 @@ document.addEventListener("DOMContentLoaded", function () {
         target_report: targetReport || commentReport || null,
         target_comment: targetComment || null,
         target_report_author: reportAuthorProfile || null,
-        target_comment_author: commentAuthorProfile || null
+        target_comment_author: commentAuthorProfile || null,
+        private_admin_note: privateAdminNote,
+        private_admin_note_author: privateAdminNoteAuthor
       };
     });
 
