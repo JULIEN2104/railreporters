@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : notes internes admin privées sur les signalements.
+     Version V2 beta : historique de modération pour masquer et restaurer les reports.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -1605,6 +1605,61 @@ document.addEventListener("DOMContentLoaded", function () {
     return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
   }
 
+  function canCurrentUserWriteModerationHistory() {
+    const role = currentProfile && currentProfile.role;
+    return Boolean(currentUser && !isCurrentUserBanned() && (role === "admin" || role === "moderator"));
+  }
+
+  async function enregistrerHistoriqueModeration({
+    actionType,
+    targetType,
+    targetId = null,
+    moderationReportId = null,
+    previousStatus = null,
+    newStatus = null,
+    reason = null,
+    metadata = {}
+  }) {
+    if (!canCurrentUserWriteModerationHistory()) {
+      const permissionError = new Error("Utilisateur non autorisé à écrire dans l’historique de modération.");
+      console.warn("Historique de modération non enregistré", permissionError);
+      return { ok: false, error: permissionError };
+    }
+
+    const payload = {
+      action_type: actionType,
+      target_type: targetType,
+      target_id: targetId || null,
+      moderation_report_id: moderationReportId || null,
+      previous_status: previousStatus || null,
+      new_status: newStatus || null,
+      reason: reason || null,
+      metadata: metadata && typeof metadata === "object" ? metadata : {}
+    };
+
+    const { error } = await supabaseClient
+      .from("moderation_action_history")
+      .insert(payload);
+
+    if (error) {
+      console.warn("Erreur enregistrement historique de modération", {
+        error,
+        payload
+      });
+      return { ok: false, error };
+    }
+
+    return { ok: true, error: null };
+  }
+
+  function getModerationHistorySuccessMessage(actionLabel, historyResult) {
+    if (historyResult && historyResult.ok) {
+      return actionLabel + " et action enregistrée dans l’historique.";
+    }
+
+    return actionLabel + ", mais l’historique n’a pas pu être enregistré. Vérifiez l’espace admin Supabase.";
+  }
+
 
   function ensureAdminDashboardSection() {
     if (adminDashboardSection) return adminDashboardSection;
@@ -1832,10 +1887,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "report_restored",
+            targetType: "report",
+            targetId: reportId,
+            previousStatus: "hidden",
+            newStatus: "published",
+            reason: "Restauration manuelle depuis l’espace admin RailReporters",
+            metadata: {
+              source: "admin_dashboard",
+              report_title: reportTitle
+            }
+          });
+
           openedReportId = reportId;
           await chargerReportsSupabase(false);
           await chargerReportsMasquesAdmin();
-          alert("Report restauré avec succès.");
+          alert(getModerationHistorySuccessMessage("Report restauré avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-restore-report"));
           button.disabled = false;
@@ -2638,6 +2706,35 @@ document.addEventListener("DOMContentLoaded", function () {
             throw moderationError;
           }
 
+          let historyResult = null;
+          if (contentType === "report") {
+            const moderationItem = moderationReports.find(function (item) {
+              return String(item.id) === String(moderationReportId);
+            });
+            const previousStatus = moderationItem && moderationItem.target_report && moderationItem.target_report.status
+              ? moderationItem.target_report.status
+              : "published";
+            const reportTitle = moderationItem && moderationItem.target_report && moderationItem.target_report.title
+              ? moderationItem.target_report.title
+              : "Report signalé";
+
+            historyResult = await enregistrerHistoriqueModeration({
+              actionType: "report_hidden_from_moderation_report",
+              targetType: "report",
+              targetId: contentId,
+              moderationReportId,
+              previousStatus,
+              newStatus: "hidden",
+              reason: moderationItem && moderationItem.reason
+                ? "Signalement : " + moderationItem.reason
+                : "Masquage depuis un signalement",
+              metadata: {
+                source: "moderation_report",
+                report_title: reportTitle
+              }
+            });
+          }
+
           if (contentType === "report" && openedReportId === contentId) {
             openedReportId = null;
           }
@@ -2653,11 +2750,12 @@ document.addEventListener("DOMContentLoaded", function () {
           if (canCurrentUserManageComments()) await chargerCommentairesMasquesAdmin();
           await chargerSignalementsAdmin();
 
-          alert(
-            contentType === "report"
-              ? "Report signalé masqué et signalement marqué comme traité."
-              : "Commentaire signalé masqué et signalement marqué comme traité."
-          );
+          if (contentType === "report") {
+            const baseMessage = "Report signalé masqué et signalement marqué comme traité";
+            alert(getModerationHistorySuccessMessage(baseMessage, historyResult));
+          } else {
+            alert("Commentaire signalé masqué et signalement marqué comme traité.");
+          }
         } catch (error) {
           const context = contentType === "report" ? "admin-hide-report" : "admin-hide-comment";
           alert(getFriendlySupabaseError(error, context));
@@ -3247,13 +3345,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "report_hidden",
+            targetType: "report",
+            targetId: reportId,
+            previousStatus: "published",
+            newStatus: "hidden",
+            reason: "Masquage manuel depuis le report ouvert",
+            metadata: {
+              source: "report_view",
+              report_title: reportTitle
+            }
+          });
+
           openedReportId = null;
           if (moderationPreviewReport && String(moderationPreviewReport.id) === String(reportId)) {
             clearModerationContentView(false);
           }
           await chargerReportsSupabase(false);
           await chargerReportsMasquesAdmin();
-          alert("Report masqué avec succès.");
+          alert(getModerationHistorySuccessMessage("Report masqué avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-hide-report"));
           button.disabled = false;
