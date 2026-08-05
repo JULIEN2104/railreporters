@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : historique de modération pour masquer et restaurer les reports et commentaires.
+     Version V2 beta : historique de modération pour reports, commentaires et utilisateurs.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -3047,15 +3047,15 @@ document.addEventListener("DOMContentLoaded", function () {
     const role = profile.role || "member";
     const isBanned = profile.is_banned === true;
     const isCurrentAdmin = currentUser && profile.id === currentUser.id;
-    const isAdminRole = role === "admin";
+    const isProtectedRole = role === "admin" || role === "moderator";
     const createdAt = profile.created_at ? formaterDate(String(profile.created_at).slice(0, 10)) : "Date inconnue";
 
     let actionHtml = "";
 
     if (isCurrentAdmin) {
       actionHtml = `<p class="admin-user-protected">Compte admin connecté — aucune action rapide.</p>`;
-    } else if (isAdminRole) {
-      actionHtml = `<p class="admin-user-protected">Compte admin protégé.</p>`;
+    } else if (isProtectedRole) {
+      actionHtml = `<p class="admin-user-protected">Compte de modération protégé.</p>`;
     } else if (isBanned) {
       actionHtml = `
         <button
@@ -3141,6 +3141,35 @@ document.addEventListener("DOMContentLoaded", function () {
         button.textContent = "Bannissement...";
 
         try {
+          const targetProfile = adminUsers.find(function (profile) {
+            return String(profile.id) === String(userId);
+          }) || null;
+
+          if (!targetProfile) {
+            throw new Error("Profil utilisateur introuvable.");
+          }
+
+          if (currentUser && String(targetProfile.id) === String(currentUser.id)) {
+            alert("Vous ne pouvez pas bannir votre propre compte administrateur.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
+          if (targetProfile.role !== "member") {
+            alert("Seuls les comptes membres peuvent être bannis dans cette version.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
+          if (targetProfile.is_banned === true) {
+            alert("Ce compte est déjà banni.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
           const { error } = await supabaseClient
             .from("profiles")
             .update({ is_banned: true })
@@ -3148,8 +3177,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "user_banned",
+            targetType: "profile",
+            targetId: userId,
+            previousStatus: "active",
+            newStatus: "banned",
+            reason: "Bannissement effectué depuis l’espace admin RailReporters",
+            metadata: {
+              source: "admin_dashboard",
+              username,
+              target_role: targetProfile.role || "member"
+            }
+          });
+
           await chargerUtilisateursAdmin();
-          alert("Utilisateur banni avec succès.");
+          alert(getModerationHistorySuccessMessage("Utilisateur banni avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-users"));
           button.disabled = false;
@@ -3181,6 +3224,35 @@ document.addEventListener("DOMContentLoaded", function () {
         button.textContent = "Débannissement...";
 
         try {
+          const targetProfile = adminUsers.find(function (profile) {
+            return String(profile.id) === String(userId);
+          }) || null;
+
+          if (!targetProfile) {
+            throw new Error("Profil utilisateur introuvable.");
+          }
+
+          if (currentUser && String(targetProfile.id) === String(currentUser.id)) {
+            alert("Votre propre compte administrateur n’est pas concerné par cette action.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
+          if (targetProfile.role !== "member") {
+            alert("Seuls les comptes membres peuvent être débannis dans cette version.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
+          if (targetProfile.is_banned !== true) {
+            alert("Ce compte est déjà actif.");
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+
           const { error } = await supabaseClient
             .from("profiles")
             .update({ is_banned: false })
@@ -3188,8 +3260,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "user_unbanned",
+            targetType: "profile",
+            targetId: userId,
+            previousStatus: "banned",
+            newStatus: "active",
+            reason: "Débannissement effectué depuis l’espace admin RailReporters",
+            metadata: {
+              source: "admin_dashboard",
+              username,
+              target_role: targetProfile.role || "member"
+            }
+          });
+
           await chargerUtilisateursAdmin();
-          alert("Utilisateur débanni avec succès.");
+          alert(getModerationHistorySuccessMessage("Utilisateur débanni avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-users"));
           button.disabled = false;
