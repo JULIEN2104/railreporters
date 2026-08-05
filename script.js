@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : historique de modération pour masquer et restaurer les reports.
+     Version V2 beta : historique de modération pour masquer et restaurer les reports et commentaires.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -2088,6 +2088,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "comment_restored",
+            targetType: "comment",
+            targetId: commentId,
+            previousStatus: "hidden",
+            newStatus: "published",
+            reason: "Restauration manuelle depuis l’espace admin RailReporters",
+            metadata: {
+              source: "admin_dashboard",
+              report_id: reportId || null,
+              comment_author: commentAuthor
+            }
+          });
+
           openedReportId = reportId;
           if (String(moderationPreviewCommentId || "") === String(commentId)) {
             clearModerationContentView(false);
@@ -2095,7 +2109,7 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           await chargerReportsSupabase(true);
           await chargerCommentairesMasquesAdmin();
-          alert("Commentaire restauré avec succès.");
+          alert(getModerationHistorySuccessMessage("Commentaire restauré avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-restore-comment"));
           button.disabled = false;
@@ -2706,11 +2720,12 @@ document.addEventListener("DOMContentLoaded", function () {
             throw moderationError;
           }
 
+          const moderationItem = moderationReports.find(function (item) {
+            return String(item.id) === String(moderationReportId);
+          });
+
           let historyResult = null;
           if (contentType === "report") {
-            const moderationItem = moderationReports.find(function (item) {
-              return String(item.id) === String(moderationReportId);
-            });
             const previousStatus = moderationItem && moderationItem.target_report && moderationItem.target_report.status
               ? moderationItem.target_report.status
               : "published";
@@ -2731,6 +2746,37 @@ document.addEventListener("DOMContentLoaded", function () {
               metadata: {
                 source: "moderation_report",
                 report_title: reportTitle
+              }
+            });
+          } else if (contentType === "comment") {
+            const previousStatus = moderationItem && moderationItem.target_comment && moderationItem.target_comment.status
+              ? moderationItem.target_comment.status
+              : "published";
+            const commentAuthor = moderationItem && moderationItem.target_comment_author
+              ? getAuthorLabel(moderationItem.target_comment_author)
+              : "Auteur inconnu";
+            const reportId = moderationItem && moderationItem.target_comment && moderationItem.target_comment.report_id
+              ? moderationItem.target_comment.report_id
+              : (moderationItem && moderationItem.target_report ? moderationItem.target_report.id : null);
+            const reportTitle = moderationItem && moderationItem.target_report && moderationItem.target_report.title
+              ? moderationItem.target_report.title
+              : "Report associé";
+
+            historyResult = await enregistrerHistoriqueModeration({
+              actionType: "comment_hidden_from_moderation_report",
+              targetType: "comment",
+              targetId: contentId,
+              moderationReportId,
+              previousStatus,
+              newStatus: "hidden",
+              reason: moderationItem && moderationItem.reason
+                ? "Signalement : " + moderationItem.reason
+                : "Masquage depuis un signalement",
+              metadata: {
+                source: "moderation_report",
+                report_id: reportId,
+                report_title: reportTitle,
+                comment_author: commentAuthor
               }
             });
           }
@@ -2754,7 +2800,8 @@ document.addEventListener("DOMContentLoaded", function () {
             const baseMessage = "Report signalé masqué et signalement marqué comme traité";
             alert(getModerationHistorySuccessMessage(baseMessage, historyResult));
           } else {
-            alert("Commentaire signalé masqué et signalement marqué comme traité.");
+            const baseMessage = "Commentaire signalé masqué et signalement marqué comme traité";
+            alert(getModerationHistorySuccessMessage(baseMessage, historyResult));
           }
         } catch (error) {
           const context = contentType === "report" ? "admin-hide-report" : "admin-hide-comment";
@@ -3404,10 +3451,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: "comment_hidden",
+            targetType: "comment",
+            targetId: commentId,
+            previousStatus: "published",
+            newStatus: "hidden",
+            reason: "Masquage manuel depuis le report ouvert",
+            metadata: {
+              source: "report_view",
+              report_id: reportId || null,
+              comment_author: commentAuthor
+            }
+          });
+
           openedReportId = reportId;
           await chargerReportsSupabase(true);
           await chargerCommentairesMasquesAdmin();
-          alert("Commentaire masqué avec succès.");
+          alert(getModerationHistorySuccessMessage("Commentaire masqué avec succès", historyResult));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-hide-comment"));
           button.disabled = false;
