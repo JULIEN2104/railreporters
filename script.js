@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : historique de modération pour reports, commentaires, utilisateurs et statuts des signalements.
+     Version V2 beta : historique de modération étendu aux créations et modifications des notes internes admin.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -2679,6 +2679,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const originalText = button.textContent;
         const isUpdate = Boolean(item.private_admin_note && item.private_admin_note.id);
+        const previousNote = isUpdate ? String(item.private_admin_note.note || "").trim() : "";
+
+        if (isUpdate && note === previousNote) {
+          setNoteStatus("Aucune modification n’a été détectée dans la note.", "");
+          return;
+        }
+
+        const previousLength = previousNote.length;
         button.disabled = true;
         button.textContent = isUpdate ? "Mise à jour..." : "Enregistrement...";
         setNoteStatus("Enregistrement de la note interne...", "loading");
@@ -2712,13 +2720,52 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (result.error) throw result.error;
 
-          item.private_admin_note = result.data;
+          const savedNote = result.data;
+          const savedNoteText = String(savedNote.note || note);
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: isUpdate ? "admin_note_updated" : "admin_note_created",
+            targetType: "admin_note",
+            targetId: savedNote.id,
+            moderationReportId,
+            reason: isUpdate
+              ? "Note interne mise à jour depuis l’espace admin"
+              : "Note interne créée depuis l’espace admin",
+            metadata: isUpdate
+              ? {
+                  source: "admin_dashboard",
+                  operation: "updated",
+                  previous_length: previousLength,
+                  new_length: savedNoteText.length
+                }
+              : {
+                  source: "admin_dashboard",
+                  operation: "created",
+                  note_length: savedNoteText.length
+                }
+          });
+
+          item.private_admin_note = savedNote;
           item.private_admin_note_author = currentProfile || null;
-          input.value = result.data.note || note;
+          input.value = savedNoteText;
           if (count) count.textContent = `${input.value.length}/1000`;
           if (metadata) metadata.textContent = getAdminNoteMetadata(item);
           button.textContent = "Mettre à jour la note";
-          setNoteStatus(isUpdate ? "Note interne mise à jour." : "Note interne enregistrée.", "ok");
+
+          if (historyResult.ok) {
+            setNoteStatus(
+              isUpdate
+                ? "Note interne mise à jour et action ajoutée à l’historique."
+                : "Note interne enregistrée et action ajoutée à l’historique.",
+              "ok"
+            );
+          } else {
+            setNoteStatus(
+              isUpdate
+                ? "Note interne mise à jour, mais l’historique n’a pas pu être enregistré."
+                : "Note interne enregistrée, mais l’historique n’a pas pu être mis à jour.",
+              "error"
+            );
+          }
         } catch (error) {
           console.warn("Erreur enregistrement note interne", error);
           setNoteStatus(getFriendlySupabaseError(error, "admin-notes"), "error");
