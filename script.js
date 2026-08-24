@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   /* =====================================================
      RAILREPORTERS — V2 BETA LOCALE SUPABASE
-     Version V2 beta : historique de modération pour reports, commentaires et utilisateurs.
+     Version V2 beta : historique de modération pour reports, commentaires, utilisateurs et statuts des signalements.
      Ne pas publier sans test complet.
      ===================================================== */
 
@@ -2199,6 +2199,61 @@ document.addEventListener("DOMContentLoaded", function () {
     return status || "Statut inconnu";
   }
 
+  function getModerationReportHistoryActionType(status) {
+    if (status === "reviewed") return "moderation_report_reviewed";
+    if (status === "rejected") return "moderation_report_rejected";
+    if (status === "action_taken") return "moderation_report_action_taken";
+    return null;
+  }
+
+  function getModerationReportStatusSuccessLabel(status) {
+    if (status === "reviewed") return "Signalement marqué comme examiné";
+    if (status === "rejected") return "Signalement rejeté";
+    if (status === "action_taken") return "Signalement marqué comme traité";
+    return "Signalement mis à jour";
+  }
+
+  function getAllowedModerationReportTransitions(currentStatus) {
+    if (currentStatus === "pending") {
+      return ["reviewed", "rejected", "action_taken"];
+    }
+
+    if (currentStatus === "reviewed") {
+      return ["rejected", "action_taken"];
+    }
+
+    // rejected et action_taken sont des statuts finaux dans cette version.
+    return [];
+  }
+
+  function isModerationReportTransitionAllowed(currentStatus, nextStatus) {
+    return getAllowedModerationReportTransitions(currentStatus).includes(nextStatus);
+  }
+
+  function creerAdminModerationStatusActionsHtml(item) {
+    const currentStatus = item && item.status ? item.status : "pending";
+    const allowedStatuses = getAllowedModerationReportTransitions(currentStatus);
+    const buttons = [];
+
+    if (allowedStatuses.includes("reviewed")) {
+      buttons.push(`<button class="admin-moderation-status-button" data-report-id="${escapeHtml(item.id)}" data-status="reviewed">Marquer comme examiné</button>`);
+    }
+
+    if (allowedStatuses.includes("rejected")) {
+      buttons.push(`<button class="admin-moderation-status-button secondary" data-report-id="${escapeHtml(item.id)}" data-status="rejected">Rejeter</button>`);
+    }
+
+    if (allowedStatuses.includes("action_taken")) {
+      buttons.push(`<button class="admin-moderation-status-button success" data-report-id="${escapeHtml(item.id)}" data-status="action_taken">Action effectuée</button>`);
+    }
+
+    if (buttons.length > 0) {
+      return buttons.join("");
+    }
+
+    return `<p class="admin-moderation-status-final">Statut final : aucune autre transition de statut n’est autorisée.</p>`;
+  }
+
   function getModerationReasonLabel(reason) {
     const labels = {
       spam: "Spam",
@@ -2411,6 +2466,10 @@ document.addEventListener("DOMContentLoaded", function () {
       return `<button class="admin-moderation-hide-content-button danger" disabled>Contenu déjà masqué</button>`;
     }
 
+    if (item.status === "rejected") {
+      return `<button class="admin-moderation-hide-content-button danger" disabled>Signalement rejeté</button>`;
+    }
+
     const label = type === "report" ? "Masquer le report signalé" : "Masquer le commentaire signalé";
 
     return `
@@ -2518,9 +2577,7 @@ document.addEventListener("DOMContentLoaded", function () {
         <div class="admin-moderation-actions">
           ${creerAdminModerationViewContentHtml(item)}
           ${creerAdminModerationContentActionHtml(item)}
-          <button class="admin-moderation-status-button" data-report-id="${escapeHtml(item.id)}" data-status="reviewed">Marquer comme examiné</button>
-          <button class="admin-moderation-status-button secondary" data-report-id="${escapeHtml(item.id)}" data-status="rejected">Rejeter</button>
-          <button class="admin-moderation-status-button success" data-report-id="${escapeHtml(item.id)}" data-status="action_taken">Action effectuée</button>
+          ${creerAdminModerationStatusActionsHtml(item)}
         </div>
       </article>`;
   }
@@ -2683,6 +2740,28 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
+        const moderationItem = moderationReports.find(function (item) {
+          return String(item.id) === String(moderationReportId);
+        });
+
+        if (!moderationItem) {
+          alert("Le signalement concerné est introuvable. Rechargez l’espace admin puis réessayez.");
+          return;
+        }
+
+        const currentModerationStatus = moderationItem.status || "pending";
+
+        if (
+          currentModerationStatus !== "action_taken" &&
+          !isModerationReportTransitionAllowed(currentModerationStatus, "action_taken")
+        ) {
+          alert(
+            "Le contenu ne peut pas être masqué depuis un signalement au statut : " +
+            getModerationStatusLabel(currentModerationStatus) + "."
+          );
+          return;
+        }
+
         const contentLabel = contentType === "report" ? "report" : "commentaire";
         const confirmed = window.confirm(
           "Voulez-vous vraiment masquer le " + contentLabel + " signalé ?\n\n" +
@@ -2708,21 +2787,19 @@ document.addEventListener("DOMContentLoaded", function () {
             throw contentError;
           }
 
-          const { error: moderationError } = await supabaseClient
-            .from("moderation_reports")
-            .update({
-              status: "action_taken",
-              reviewed_at: new Date().toISOString()
-            })
-            .eq("id", moderationReportId);
+          if (currentModerationStatus !== "action_taken") {
+            const { error: moderationError } = await supabaseClient
+              .from("moderation_reports")
+              .update({
+                status: "action_taken",
+                reviewed_at: new Date().toISOString()
+              })
+              .eq("id", moderationReportId);
 
-          if (moderationError) {
-            throw moderationError;
+            if (moderationError) {
+              throw moderationError;
+            }
           }
-
-          const moderationItem = moderationReports.find(function (item) {
-            return String(item.id) === String(moderationReportId);
-          });
 
           let historyResult = null;
           if (contentType === "report") {
@@ -2796,11 +2873,17 @@ document.addEventListener("DOMContentLoaded", function () {
           if (canCurrentUserManageComments()) await chargerCommentairesMasquesAdmin();
           await chargerSignalementsAdmin();
 
+          const signalementDejaTraite = currentModerationStatus === "action_taken";
+
           if (contentType === "report") {
-            const baseMessage = "Report signalé masqué et signalement marqué comme traité";
+            const baseMessage = signalementDejaTraite
+              ? "Report signalé masqué"
+              : "Report signalé masqué et signalement marqué comme traité";
             alert(getModerationHistorySuccessMessage(baseMessage, historyResult));
           } else {
-            const baseMessage = "Commentaire signalé masqué et signalement marqué comme traité";
+            const baseMessage = signalementDejaTraite
+              ? "Commentaire signalé masqué"
+              : "Commentaire signalé masqué et signalement marqué comme traité";
             alert(getModerationHistorySuccessMessage(baseMessage, historyResult));
           }
         } catch (error) {
@@ -2817,9 +2900,39 @@ document.addEventListener("DOMContentLoaded", function () {
         const moderationReportId = button.getAttribute("data-report-id");
         const nextStatus = button.getAttribute("data-status");
         const label = getModerationStatusLabel(nextStatus);
+        const historyActionType = getModerationReportHistoryActionType(nextStatus);
 
         if (!canCurrentUserManageModerationReports()) {
           alert("Cette action est réservée à l’administrateur RailReporters.");
+          return;
+        }
+
+        if (!historyActionType) {
+          alert("Ce statut de signalement n’est pas pris en charge.");
+          return;
+        }
+
+        const moderationItem = moderationReports.find(function (item) {
+          return String(item.id) === String(moderationReportId);
+        });
+
+        if (!moderationItem) {
+          alert("Le signalement concerné est introuvable. Rechargez l’espace admin puis réessayez.");
+          return;
+        }
+
+        const previousStatus = moderationItem.status || "pending";
+
+        if (previousStatus === nextStatus) {
+          alert("Ce signalement possède déjà le statut : " + label + ".");
+          return;
+        }
+
+        if (!isModerationReportTransitionAllowed(previousStatus, nextStatus)) {
+          alert(
+            "Ce changement de statut n’est pas autorisé depuis le statut : " +
+            getModerationStatusLabel(previousStatus) + "."
+          );
           return;
         }
 
@@ -2831,18 +2944,46 @@ document.addEventListener("DOMContentLoaded", function () {
         button.textContent = "Mise à jour...";
 
         try {
-          const { error } = await supabaseClient
+          const reviewedAt = new Date().toISOString();
+          const { data: updatedModerationReport, error } = await supabaseClient
             .from("moderation_reports")
             .update({
               status: nextStatus,
-              reviewed_at: new Date().toISOString()
+              reviewed_at: reviewedAt
             })
-            .eq("id", moderationReportId);
+            .eq("id", moderationReportId)
+            .select("id, status, content_type, content_id, reason, reviewed_at")
+            .single();
 
           if (error) throw error;
 
+          const historyResult = await enregistrerHistoriqueModeration({
+            actionType: historyActionType,
+            targetType: "moderation_report",
+            targetId: moderationReportId,
+            moderationReportId,
+            previousStatus,
+            newStatus: nextStatus,
+            reason: "Changement de statut depuis l’espace admin",
+            metadata: {
+              source: "admin_dashboard",
+              content_type: updatedModerationReport && updatedModerationReport.content_type
+                ? updatedModerationReport.content_type
+                : (moderationItem.content_type || null),
+              content_id: updatedModerationReport && updatedModerationReport.content_id
+                ? updatedModerationReport.content_id
+                : (moderationItem.content_id || null),
+              reason_code: updatedModerationReport && updatedModerationReport.reason
+                ? updatedModerationReport.reason
+                : (moderationItem.reason || null)
+            }
+          });
+
           await chargerSignalementsAdmin();
-          alert("Signalement mis à jour avec succès.");
+          alert(getModerationHistorySuccessMessage(
+            getModerationReportStatusSuccessLabel(nextStatus),
+            historyResult
+          ));
         } catch (error) {
           alert(getFriendlySupabaseError(error, "admin-moderation-reports"));
           button.disabled = false;
